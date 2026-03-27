@@ -33,6 +33,9 @@ const KnowledgeBase = {
 
 <h4>Map</h4>
 <p>The world is a vast procedurally generated desert with oases, cliffs, and mineral deposits. The map generates infinitely as you explore — new terrain, resources, and features appear as your NPCs discover new areas.</p>
+
+<h4>Day/Night Cycle</h4>
+<p>Time passes in Stonekeep — a full day/night cycle takes about 4 minutes at normal speed. Watch the clock below the minimap. Night brings reduced visibility, increased danger from bandits and lions, but sleeping deer are easier to hunt. See the <b>Time &amp; Day/Night</b> section for details.</p>
 <p class="kb-tip">Tip: Follow roads and oases to find fertile land for farms!</p>`;
             }
         },
@@ -273,23 +276,32 @@ const KnowledgeBase = {
 <h4>Passive Animals (Huntable)</h4>
 <table>
 <tr><th>Animal</th><th>HP</th><th>Herd Size</th><th>Terrain</th><th>Drops</th></tr>
-<tr><td>Deer 🦌</td><td>3</td><td>10</td><td>Grass, Oasis</td><td>5 meat</td></tr>
-<tr><td>Camel 🐪</td><td>4</td><td>8</td><td>Desert</td><td>5 meat</td></tr>
+<tr><td>Deer</td><td>3</td><td>10</td><td>Grass, Oasis</td><td>5 meat</td></tr>
+<tr><td>Camel</td><td>4</td><td>8</td><td>Desert</td><td>5 meat</td></tr>
 </table>
 <p>Passive animals flee when player NPCs approach. Hunter's Post workers track, kill, butcher (12 ticks), and return 5 meat per kill.</p>
+
+<h4>Day/Night Animal Behavior</h4>
+<p>Animals respond to the time of day based on their nature:</p>
+<ul>
+<li><b>Deer &amp; Camels</b> (diurnal): Active during dawn, day, and dusk. At night they rest — barely moving, with reduced threat awareness (halved flee detection range).</li>
+<li><b>Lions</b> (nocturnal): Most active at dusk, night, and dawn. At night, lions have extended aggro range (14 tiles vs 10 during day) and move 50% faster. Be especially wary of lion attacks after dark!</li>
+<li><b>Dogs &amp; Cats</b>: Unaffected by time — companion  animals follow their owners regardless of the hour.</li>
+</ul>
+<p class="kb-tip">Tip: Night hunting is easier — passive animals are less alert. But watch out for nocturnal lions!</p>
 
 <h4>Hostile Animals</h4>
 <table>
 <tr><th>Animal</th><th>HP</th><th>DMG</th><th>Herd Size</th><th>Aggro Range</th></tr>
-<tr><td>Lion 🦁</td><td>15</td><td>4</td><td>3</td><td>10 tiles</td></tr>
+<tr><td>Lion</td><td>15</td><td>4</td><td>3</td><td>10 tiles</td></tr>
 </table>
 <p>Lions attack NPCs on sight. They spawn 80–180 tiles from buildings. Troops auto-engage hostile animals.</p>
 
 <h4>Companion Animals (Tameable)</h4>
 <table>
 <tr><th>Animal</th><th>HP</th><th>DMG</th><th>Herd</th><th>Tame Range</th><th>FOW Vision</th><th>Role</th></tr>
-<tr><td>Dog 🐕</td><td>5</td><td>2</td><td>3</td><td>6 tiles</td><td>8 tiles</td><td>Combat</td></tr>
-<tr><td>Cat 🐈</td><td>2</td><td>—</td><td>2</td><td>6 tiles</td><td>6 tiles</td><td>Healer</td></tr>
+<tr><td>Dog</td><td>5</td><td>2</td><td>3</td><td>6 tiles</td><td>8 tiles</td><td>Combat</td></tr>
+<tr><td>Cat</td><td>2</td><td>—</td><td>2</td><td>6 tiles</td><td>6 tiles</td><td>Healer</td></tr>
 </table>
 
 <h4>Taming</h4>
@@ -303,15 +315,7 @@ const KnowledgeBase = {
 <h4>Pet Abilities</h4>
 <p><b>Dogs:</b> Attack nearby enemies within 6 tiles (2 damage, 4-tick cooldown).</p>
 <p><b>Cats:</b> Heal injured NPCs within 6 tiles (1 HP per 30 ticks). Clear disease clouds (5% per tick). Heal diseased NPCs.</p>
-<p class="kb-tip">Tip: Tamed animals are valuable scouts and support! Cats near your settlement help manage disease outbreaks.</p>
-
-<h4>Other Creatures</h4>
-<table>
-<tr><th>Animal</th><th>HP</th><th>DMG</th><th>Behavior</th></tr>
-<tr><td>Scorpion 🦂</td><td>3</td><td>2</td><td>Hostile, desert, herd of 4</td></tr>
-<tr><td>Snake 🐍</td><td>2</td><td>1</td><td>Hostile, desert, herd of 3</td></tr>
-<tr><td>Vulture</td><td>4</td><td>2</td><td>Hostile, desert, herd of 3</td></tr>
-</table>`;
+<p class="kb-tip">Tip: Tamed animals are valuable scouts and support! Cats near your settlement help manage disease outbreaks.</p>`;
             }
         },
 
@@ -324,7 +328,7 @@ const KnowledgeBase = {
 <h4>Random Events</h4>
 <p>Events begin after a grace period (~2400 ticks) and occur every ~4000 ticks (faster with larger population).</p>
 
-<h4>🔥 Fire Outbreak</h4>
+<h4>-- Fire Outbreak</h4>
 <p>Randomly ignites a flammable building. Build <b>Wells</b> — their workers act as firefighters.</p>
 <table>
 <tr><th>Property</th><th>Value</th></tr>
@@ -337,7 +341,7 @@ const KnowledgeBase = {
 </table>
 <p class="kb-tip">Tip: Well workers automatically fight fires. Build wells near flammable clusters!</p>
 
-<h4>⚔️ Bandit Raid</h4>
+<h4>-- Bandit Raid</h4>
 <p>Requires population ≥ 5. Bandits spawn at discovered territory edges.</p>
 <table>
 <tr><th>Property</th><th>Value</th></tr>
@@ -346,7 +350,7 @@ const KnowledgeBase = {
 <tr><td>Behavior</td><td>Attack buildings, then NPCs. 2 building damage per 6 ticks.</td></tr>
 </table>
 
-<h4>🦠 Disease Plague</h4>
+<h4>-- Disease Plague</h4>
 <p>Spawns 4 disease cloud tiles near your settlement.</p>
 <table>
 <tr><th>Property</th><th>Value</th></tr>
@@ -371,6 +375,36 @@ const KnowledgeBase = {
             }
         },
 
+        time: {
+            title: 'Time & Day/Night',
+            content() {
+                return `
+<h3>Time &amp; Day/Night Cycle</h3>
+<p>Stonekeep has a full 24-hour day/night cycle. One in-game day takes approximately <b>14 minutes</b> at normal speed (1680 game ticks). The game starts at <b>8:00 AM</b> on Day 1.</p>
+
+<h4>Day Phases</h4>
+<table>
+<tr><th>Phase</th><th>Hours</th><th>Icon</th><th>Lighting</th><th>Vision</th></tr>
+<tr><td>Dawn</td><td>5:00 – 7:00</td><td>^</td><td>Blue→Amber→Clear</td><td>12 tiles</td></tr>
+<tr><td>Day</td><td>7:00 – 19:00</td><td>*</td><td>Normal (no overlay)</td><td>15 tiles</td></tr>
+<tr><td>Dusk</td><td>19:00 – 21:00</td><td>v</td><td>Amber→Blue</td><td>12 tiles</td></tr>
+<tr><td>Night</td><td>21:00 – 5:00</td><td>(</td><td>Deep blue tint</td><td>10 tiles</td></tr>
+</table>
+
+<h4>Clock UI</h4>
+<p>The clock panel sits between the minimap and the speed controls ribbon, showing the current time, phase icon, phase name, and day number.</p>
+
+<h4>Night Effects</h4>
+<ul>
+<li><b>Reduced vision</b>: NPC fog-of-war radius drops from 15 to 10 tiles at night (12 at dawn/dusk).</li>
+<li><b>Bandit raids</b>: Raids are roughly twice as likely to occur at night. Keep your defenses ready!</li>
+<li><b>Fire glow</b>: Campfires and torches glow brighter at night and dusk for enhanced visibility.</li>
+<li><b>Animal behavior</b>: Deer and camels sleep at night (barely move, harder to scare). Lions become more dangerous (extended aggro range, faster movement).</li>
+</ul>
+<p class="kb-tip">Tip: Night is dangerous — keep troops on patrol and fires lit near your settlement walls!</p>`;
+            }
+        },
+
         terrain: {
             title: 'Terrain',
             content() {
@@ -378,17 +412,17 @@ const KnowledgeBase = {
 <h3>Terrain Types</h3>
 <table>
 <tr><th>Terrain</th><th>Walk</th><th>Build</th><th>Fertile</th><th>Notes</th></tr>
-<tr><td>Desert</td><td>✅</td><td>✅</td><td>❌</td><td>Default terrain. Not farmable.</td></tr>
-<tr><td>Grassland</td><td>✅</td><td>✅</td><td>✅</td><td>Found near oases. Farms allowed.</td></tr>
-<tr><td>Oasis</td><td>✅</td><td>✅</td><td>✅</td><td>Fertile ground around water.</td></tr>
-<tr><td>Trees</td><td>✅</td><td>❌</td><td>—</td><td>Harvestable for wood. 3 variants.</td></tr>
-<tr><td>Water</td><td>❌</td><td>❌</td><td>—</td><td>Impassable. Use Fill to convert.</td></tr>
-<tr><td>Cliff</td><td>❌</td><td>❌</td><td>—</td><td>Impassable rock formations.</td></tr>
-<tr><td>Rock</td><td>❌</td><td>❌</td><td>—</td><td>Impassable boulders.</td></tr>
-<tr><td>Stone Deposit</td><td>❌</td><td>❌</td><td>—</td><td>Place Quarry ON deposit tiles.</td></tr>
-<tr><td>Iron Deposit</td><td>❌</td><td>❌</td><td>—</td><td>Place Iron Mine ON deposit tiles.</td></tr>
-<tr><td>Pitch Deposit</td><td>❌</td><td>❌</td><td>—</td><td>Place Pitch Rig ON deposit tiles.</td></tr>
-<tr><td>Pitch Ditch</td><td>❌</td><td>❌</td><td>—</td><td>Flammable trap terrain.</td></tr>
+<tr><td>Desert</td><td>Y</td><td>Y</td><td>N</td><td>Default terrain. Not farmable.</td></tr>
+<tr><td>Grassland</td><td>Y</td><td>Y</td><td>Y</td><td>Found near oases. Farms allowed.</td></tr>
+<tr><td>Oasis</td><td>Y</td><td>Y</td><td>Y</td><td>Fertile ground around water.</td></tr>
+<tr><td>Trees</td><td>Y</td><td>N</td><td>—</td><td>Harvestable for wood. 3 variants.</td></tr>
+<tr><td>Water</td><td>N</td><td>N</td><td>—</td><td>Impassable. Use Fill to convert.</td></tr>
+<tr><td>Cliff</td><td>N</td><td>N</td><td>—</td><td>Impassable rock formations.</td></tr>
+<tr><td>Rock</td><td>N</td><td>N</td><td>—</td><td>Impassable boulders.</td></tr>
+<tr><td>Stone Deposit</td><td>N</td><td>N</td><td>—</td><td>Place Quarry ON deposit tiles.</td></tr>
+<tr><td>Iron Deposit</td><td>N</td><td>N</td><td>—</td><td>Place Iron Mine ON deposit tiles.</td></tr>
+<tr><td>Pitch Deposit</td><td>N</td><td>N</td><td>—</td><td>Place Pitch Rig ON deposit tiles.</td></tr>
+<tr><td>Pitch Ditch</td><td>N</td><td>N</td><td>—</td><td>Flammable trap terrain.</td></tr>
 </table>
 
 <h4>Roads</h4>

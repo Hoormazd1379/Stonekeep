@@ -21,7 +21,9 @@ const Animal = {
             preferredTerrain: ['grass', 'oasis'], // prefer grasslands/oases
             carcassResource: 'meat',
             carcassAmount: 5,
-            visualRange: 12        // flee detection range
+            visualRange: 12,        // flee detection range
+            activePhases: ['dawn', 'day', 'dusk'],  // diurnal — sleep at night
+            nightMoveChance: 0.01   // barely move at night
         },
         camel: {
             id: 'camel',
@@ -40,7 +42,9 @@ const Animal = {
             preferredTerrain: ['desert'], // prefer desert tiles
             carcassResource: 'meat',
             carcassAmount: 5,
-            visualRange: 14
+            visualRange: 14,
+            activePhases: ['dawn', 'day', 'dusk'],  // diurnal
+            nightMoveChance: 0.01
         },
         lion: {
             id: 'lion',
@@ -62,7 +66,9 @@ const Animal = {
             attackCooldown: 4,        // ticks between attacks
             carcassResource: null,    // lions don't drop meat
             carcassAmount: 0,
-            visualRange: 0
+            visualRange: 0,
+            activePhases: ['dusk', 'night', 'dawn'],  // nocturnal — more active at night
+            nightAggroRange: 14       // extended aggro range at night
         },
         dog: {
             id: 'dog',
@@ -315,12 +321,17 @@ const Animal = {
                 herd.centerY = Math.max(0, Math.min(World.height - 1, herd.centerY));
             }
 
+            // Determine effective move chance based on time of day
+            const phase = typeof Time !== 'undefined' ? Time.phase : 'day';
+            const isActive = !def.activePhases || def.activePhases.includes(phase);
+            const effectiveMoveChance = isActive ? def.moveChance : (def.nightMoveChance ?? def.moveChance);
+
             // Move individual animals
             for (const id of herd.animals) {
                 const a = this._animals.find(a => a.id === id);
                 if (!a || a.dead) continue;
 
-                if (Math.random() > def.moveChance) continue;
+                if (Math.random() > effectiveMoveChance) continue;
 
                 // Pick a direction that keeps animal near herd center
                 const dx = Math.floor(Math.random() * 3) - 1;
@@ -375,7 +386,11 @@ const Animal = {
     },
 
     _updateFleeingHerd(herd, def) {
-        const visualRange = def.visualRange || 12;
+        let visualRange = def.visualRange || 12;
+        // At night, passive animals are less alert — reduced detection range
+        if (def.activePhases && typeof Time !== 'undefined' && !def.activePhases.includes(Time.phase)) {
+            visualRange = Math.floor(visualRange * 0.5);
+        }
 
         // Check if threat is still visible to any herd member
         let canSeeThreat = false;
@@ -436,7 +451,8 @@ const Animal = {
     // ── Hostile Behavior (lions) ──
 
     _updateHostileHerd(herd, def) {
-        const aggroRange = def.aggroRange || 10;
+        const isNight = typeof Time !== 'undefined' && Time.isNight();
+        const aggroRange = isNight && def.nightAggroRange ? def.nightAggroRange : (def.aggroRange || 10);
 
         // Occasionally shift the herd center (slow drift)
         if (Math.random() < 0.01) {
@@ -486,8 +502,10 @@ const Animal = {
                     }
                 }
             } else {
-                // Normal wandering
-                if (Math.random() > def.moveChance) continue;
+                // Normal wandering — nocturnal animals move more at night
+                const hostileMoveChance = isNight && def.activePhases && def.activePhases.includes('night')
+                    ? def.moveChance * 1.5 : def.moveChance;
+                if (Math.random() > hostileMoveChance) continue;
 
                 const dx = Math.floor(Math.random() * 3) - 1;
                 const dy = Math.floor(Math.random() * 3) - 1;

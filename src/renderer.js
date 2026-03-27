@@ -167,6 +167,9 @@ const Renderer = {
         // Render event notifications
         this._renderNotifications(ctx);
 
+        // Render ambient lighting overlay (day/night cycle)
+        this._renderAmbientOverlay(ctx);
+
         // Render drag-select box
         this._renderDragBox(ctx);
     },
@@ -208,7 +211,7 @@ const Renderer = {
 
             // Combat indicator — flash crossed swords when NPC recently attacked
             if (npc._attackCooldown > 0 || npc._buildingAttackCooldown > 0) {
-                const combatChars = ['⚔', '✕', '⚔'];
+                const combatChars = ['x', '+', 'x'];
                 const ci = (World.tick + Math.floor(npc.x * 3)) % 3;
                 ctx.fillStyle = World.tick % 2 === 0 ? '#FF4444' : '#FF8800';
                 ctx.font = `bold ${Math.round(fontSize * 0.6)}px ${CONFIG.FONT_FAMILY}`;
@@ -302,8 +305,9 @@ const Renderer = {
             // Flickering fire effect — pick char and color based on tick + position
             const flicker = (World.tick + fire.x * 7 + fire.y * 13) % 3;
 
-            // Fire background glow
-            ctx.fillStyle = 'rgba(255, 80, 0, 0.35)';
+            // Fire background glow (brighter at night/dusk)
+            const glowAlpha = (typeof Time !== 'undefined' && Time.isFireEnhanced()) ? 0.55 : 0.35;
+            ctx.fillStyle = `rgba(255, 80, 0, ${glowAlpha})`;
             ctx.fillRect(screenX, screenY, tw + 1, th + 1);
 
             // Fire character
@@ -432,6 +436,15 @@ const Renderer = {
             ctx.textBaseline = 'middle';
             ctx.fillText(def.char, csx, csy);
         }
+    },
+
+    _renderAmbientOverlay(ctx) {
+        if (World.gamePhase !== 'playing') return;
+        if (typeof Time === 'undefined') return;
+        const ambient = Time.getAmbientOverlay();
+        if (ambient.alpha <= 0) return;
+        ctx.fillStyle = `rgba(${ambient.r}, ${ambient.g}, ${ambient.b}, ${ambient.alpha})`;
+        ctx.fillRect(0, 0, this.width, this.height);
     },
 
     _renderDragBox(ctx) {

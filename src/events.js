@@ -72,7 +72,11 @@ const Events = {
         if (flammable.length > 0) types.push('fire');
 
         // Bandit raid: requires minimum population
-        if (World.population >= CONFIG.BANDIT_MIN_RAID_POP) types.push('raid');
+        // At night, raids are more likely (added twice to weight pool)
+        if (World.population >= CONFIG.BANDIT_MIN_RAID_POP) {
+            types.push('raid');
+            if (typeof Time !== 'undefined' && Time.isNight()) types.push('raid');
+        }
 
         // Disease cloud: requires population > 0
         if (World.population > 0) types.push('disease');

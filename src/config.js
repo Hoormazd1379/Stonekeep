@@ -116,6 +116,12 @@ const CONFIG = {
     BANDIT_BUILDING_DAMAGE: 2,     // Damage bandits deal to buildings per attack
     BANDIT_BUILDING_COOLDOWN: 6,   // Ticks between bandit attacks on buildings
 
+    // Time system (Phase 3.1)
+    TICKS_PER_HOUR: 70,           // Game ticks per in-game hour (full day = 1680 ticks = ~14 min at speed 1)
+    START_HOUR: 8,                // Starting hour of day (8:00 AM)
+    NIGHT_VISION_RADIUS: 10,     // Reduced vision radius at night (vs 15 during day)
+    DAWN_VISION_RADIUS: 12,      // Vision radius during dawn/dusk transitions
+
     // Colors
     COLORS: {
         UI_GOLD: '#c8a82e',

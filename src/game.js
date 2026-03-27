@@ -26,6 +26,9 @@ const Game = {
         // Initialize events system
         Events.init();
 
+        // Initialize time system
+        Time.init();
+
         // Initialize map generator and generate starting area
         MapGenerator.init(seed, worldSize);
         MapGenerator.generateArea(center, center, mapSize);
@@ -84,6 +87,7 @@ const Game = {
         Animal.update();
         Fire.update();
         Events.update();
+        Time.update();
 
         // Update vision — NPCs discover tiles within vision radius
         this._updateVision();
@@ -194,7 +198,7 @@ const Game = {
             return;
         }
 
-        const r = CONFIG.VISION_RADIUS;
+        const r = (typeof Time !== 'undefined') ? Time.getVisionRadius() : CONFIG.VISION_RADIUS;
         const r2 = r * r;
         const cs = CONFIG.CHUNK_SIZE;
 

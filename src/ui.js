@@ -256,6 +256,14 @@ const UI = {
         document.getElementById('resHappiness').innerHTML = World.happiness + this._trendArrow('happiness');
         document.getElementById('tpsDisplay').textContent = this._tpsDisplay;
 
+        // Update clock display
+        if (typeof Time !== 'undefined') {
+            document.getElementById('clockTime').textContent = Time.getTimeString();
+            document.getElementById('clockIcon').textContent = Time.getPhaseIcon();
+            document.getElementById('clockPhase').textContent = Time.getPhaseName();
+            document.getElementById('clockDay').textContent = 'Day ' + Time.day;
+        }
+
         // Live-update info panel if a tile is selected
         if (this._lastInfoTileX >= 0 && this._lastInfoTileY >= 0) {
             if (World.selectedUnits.length > 1) {
@@ -384,7 +392,7 @@ const UI = {
         if (def.workers && def.workers > 0) {
             const sleepBtn = document.createElement('button');
             sleepBtn.className = 'build-btn';
-            sleepBtn.textContent = building.active ? '💤 Deactivate' : '☀ Activate';
+            sleepBtn.textContent = building.active ? 'Zzz Deactivate' : '[+] Activate';
             sleepBtn.addEventListener('click', () => {
                 building.active = !building.active;
                 if (!building.active) {
@@ -442,7 +450,7 @@ const UI = {
             const demolishBtn = document.createElement('button');
             demolishBtn.className = 'build-btn';
             demolishBtn.style.color = '#cc4444';
-            demolishBtn.textContent = '✕ Demolish';
+            demolishBtn.textContent = 'x Demolish';
             demolishBtn.addEventListener('click', () => {
                 // Release workers
                 for (const wid of building.workers || []) {
@@ -590,7 +598,7 @@ const UI = {
             const warnTitle = document.createElement('div');
             warnTitle.className = 'build-category-title';
             warnTitle.style.color = '#cc4444';
-            warnTitle.textContent = '⚠ Issues';
+            warnTitle.textContent = '[!] Issues';
             warnDiv.appendChild(warnTitle);
             for (const w of warnings) {
                 const wRow = document.createElement('div');
@@ -836,7 +844,7 @@ const UI = {
             html += `<div>Height: ${tile.height}</div>`;
         }
         if (Events.isDiseased(x, y)) {
-            html += `<div style="color:#88CC00">⚠ Disease Cloud</div>`;
+            html += `<div style="color:#88CC00">[!] Disease Cloud</div>`;
         }
 
         const building = World.getBuildingAt(x, y);
@@ -900,7 +908,7 @@ const UI = {
         }
         html += `<div style="font-size:10px;color:#4c4">State: ${unit.walkPurpose || unit.state}</div>`;
         if (unit.diseased) {
-            html += `<div style="font-size:10px;color:#88CC00">⚠ Diseased</div>`;
+            html += `<div style="font-size:10px;color:#88CC00">[!] Diseased</div>`;
         }
         html += `<div style="font-size:10px;color:#888;margin-top:4px">Right-click to issue move order</div>`;
         html += `<button data-focus-npc="${unit.id}" style="margin-top:4px;padding:2px 8px;font-size:10px;cursor:pointer;background:#333;color:#c8a82e;border:1px solid #555">Focus</button>`;
@@ -936,7 +944,7 @@ const UI = {
             if (u.diseased) diseasedCount++;
         }
 
-        let html = `<div style="color:#c8a82e;font-size:13px">⚔ ${units.length} Units Selected</div>`;
+        let html = `<div style="color:#c8a82e;font-size:13px">[${units.length}] Units Selected</div>`;
         html += `<div style="font-size:10px">Total HP: ${totalHp}/${totalMaxHp}</div>`;
 
         // Type breakdown
@@ -945,7 +953,7 @@ const UI = {
         }
 
         if (diseasedCount > 0) {
-            html += `<div style="font-size:10px;color:#88CC00">⚠ ${diseasedCount} diseased</div>`;
+            html += `<div style="font-size:10px;color:#88CC00">[!] ${diseasedCount} diseased</div>`;
         }
 
         html += `<div style="font-size:10px;color:#888;margin-top:4px">Right-click to issue group move order</div>`;
@@ -1080,12 +1088,12 @@ const UI = {
 
         // Disease status
         if (npc.diseased) {
-            html += `<div style="font-size:10px;color:#88CC00;margin-left:8px">⚠ Diseased</div>`;
+            html += `<div style="font-size:10px;color:#88CC00;margin-left:8px">[!] Diseased</div>`;
         }
 
         // On fire status
         if (npc.onFire) {
-            html += `<div style="font-size:10px;color:#FF6600;margin-left:8px">🔥 On Fire!</div>`;
+            html += `<div style="font-size:10px;color:#FF6600;margin-left:8px">~^ On Fire!</div>`;
         }
 
         // Focus button + Details button

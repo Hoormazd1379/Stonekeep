@@ -291,9 +291,41 @@
             border-bottom: none;
             background: #000;
         }
-        #minimapRibbon {
+        #clockPanel {
             position: absolute;
             top: 240px;
+            right: 6px;
+            width: 202px;
+            box-sizing: border-box;
+            background: rgba(0,0,0,0.85);
+            border: 1px solid #444;
+            border-top: none;
+            border-bottom: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 4px 6px;
+            font-family: monospace;
+            font-size: 11px;
+            color: #c8a82e;
+        }
+        #clockPanel .clock-time {
+            font-size: 13px;
+            font-weight: bold;
+            color: #eee;
+        }
+        #clockPanel .clock-day {
+            color: #888;
+            font-size: 10px;
+        }
+        #clockPanel .clock-phase {
+            font-size: 10px;
+            color: #aaa;
+        }
+        #minimapRibbon {
+            position: absolute;
+            top: 264px;
             right: 6px;
             width: 202px;
             box-sizing: border-box;
@@ -496,6 +528,12 @@
             </div>
         </div>
         <canvas id="minimap" width="200" height="200"></canvas>
+        <div id="clockPanel">
+            <span id="clockIcon">*</span>
+            <span class="clock-time" id="clockTime">08:00</span>
+            <span class="clock-phase" id="clockPhase">Day</span>
+            <span class="clock-day" id="clockDay">Day 1</span>
+        </div>
         <div id="minimapRibbon">
             <div id="speedControls">
                 <button data-speed="0">⏸</button>
@@ -559,6 +597,7 @@
     <script src="src/popularity.js"></script>
     <script src="src/military.js"></script>
     <script src="src/events.js"></script>
+    <script src="src/time.js"></script>
     <script src="src/knowledgeBase.js"></script>
     <script src="src/ui.js"></script>
     <script src="src/game.js"></script>
