@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stonekeep</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: monospace;
+            color: #ccc;
+        }
+        #gameCanvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #uiCanvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+        #menuOverlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            z-index: 10;
+        }
+        #menuOverlay h1 {
+            font-size: 48px;
+            color: #c8a82e;
+            margin-bottom: 10px;
+            font-family: monospace;
+            text-shadow: 2px 2px 4px #000;
+        }
+        #menuOverlay .subtitle {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 40px;
+        }
+        #menuOverlay button {
+            display: block;
+            width: 220px;
+            padding: 12px;
+            margin: 6px;
+            font-size: 16px;
+            font-family: monospace;
+            background: #1a1a1a;
+            color: #c8a82e;
+            border: 1px solid #444;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        #menuOverlay button:hover {
+            background: #2a2a1a;
+            border-color: #c8a82e;
+        }
+        #newGamePanel {
+            display: none;
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            z-index: 10;
+        }
+        #newGamePanel h2 {
+            font-size: 28px;
+            color: #c8a82e;
+            margin-bottom: 20px;
+            font-family: monospace;
+        }
+        #newGamePanel label {
+            font-size: 14px;
+            color: #aaa;
+            margin-bottom: 4px;
+            font-family: monospace;
+        }
+        #newGamePanel input {
+            width: 220px;
+            padding: 8px;
+            margin-bottom: 14px;
+            font-size: 14px;
+            font-family: monospace;
+            background: #1a1a1a;
+            color: #c8a82e;
+            border: 1px solid #444;
+            text-align: center;
+        }
+        #newGamePanel button {
+            display: block;
+            width: 220px;
+            padding: 10px;
+            margin: 6px;
+            font-size: 14px;
+            font-family: monospace;
+            background: #1a1a1a;
+            color: #c8a82e;
+            border: 1px solid #444;
+            cursor: pointer;
+        }
+        #newGamePanel button:hover {
+            background: #2a2a1a;
+            border-color: #c8a82e;
+        }
+        /* HUD elements */
+        #hud {
+            display: none;
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
+        #hud > * {
+            pointer-events: auto;
+        }
+        #topBar {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            height: 32px;
+            background: rgba(0,0,0,0.85);
+            border-bottom: 1px solid #444;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            font-family: monospace;
+            font-size: 12px;
+            gap: 16px;
+        }
+        .resource-display {
+            color: #c8a82e;
+        }
+        .resource-display span {
+            color: #eee;
+            margin-left: 3px;
+        }
+        #bottomPanel {
+            position: absolute;
+            bottom: 0; left: 0;
+            width: 100%;
+            min-height: 160px;
+            max-height: 220px;
+            background: rgba(0,0,0,0.9);
+            border-top: 1px solid #444;
+            display: flex;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        #buildMenu {
+            display: flex;
+            flex-direction: column;
+            padding: 6px;
+            gap: 4px;
+            flex: 1;
+            align-content: flex-start;
+            overflow-y: auto;
+        }
+        .build-category {
+            display: flex;
+            flex-direction: column;
+            margin-right: 12px;
+        }
+        .build-category-title {
+            color: #c8a82e;
+            font-size: 11px;
+            margin-bottom: 2px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 1px;
+        }
+        .build-tab {
+            padding: 5px 12px;
+            background: #111;
+            color: #777;
+            border: 1px solid #333;
+            border-bottom: none;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 12px;
+            border-radius: 6px 6px 0 0;
+            position: relative;
+            top: 1px;
+        }
+        .build-tab:hover {
+            background: #1a1a1a;
+            color: #c8a82e;
+        }
+        .build-tab.active {
+            background: #1a1a1a;
+            color: #c8a82e;
+            border-color: #c8a82e;
+            border-bottom: 1px solid #1a1a1a;
+            z-index: 1;
+        }
+        .build-btn {
+            padding: 6px 10px;
+            background: #1a1a1a;
+            color: #aaa;
+            border: 1px solid #333;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 12px;
+            text-align: left;
+            width: 210px;
+            box-sizing: border-box;
+        }
+        .build-btn:hover {
+            background: #2a2a1a;
+            color: #c8a82e;
+            border-color: #c8a82e;
+        }
+        .build-btn.selected {
+            background: #2a2a1a;
+            color: #c8a82e;
+            border-color: #c8a82e;
+        }
+        #infoPanel {
+            width: 280px;
+            border-left: 1px solid #444;
+            padding: 6px;
+            color: #aaa;
+            overflow-y: auto;
+            max-height: 200px;
+        }
+        #infoPanel h3 {
+            color: #c8a82e;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+        #speedControls {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            flex-wrap: nowrap;
+        }
+        #speedControls button {
+            padding: 1px 4px;
+            background: #1a1a1a;
+            color: #aaa;
+            border: 1px solid #333;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 9px;
+            line-height: 1;
+        }
+        #speedControls button:hover,
+        #speedControls button.active {
+            color: #c8a82e;
+            border-color: #c8a82e;
+        }
+        #zoomControls {
+            position: absolute;
+            top: 0;
+            right: 10px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        #zoomControls button {
+            padding: 2px 8px;
+            background: #1a1a1a;
+            color: #aaa;
+            border: 1px solid #333;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 11px;
+        }
+        #zoomControls button:hover {
+            color: #c8a82e;
+            border-color: #c8a82e;
+        }
+        #minimap {
+            position: absolute;
+            top: 38px;
+            right: 6px;
+            border: 1px solid #444;
+            border-bottom: none;
+            background: #000;
+        }
+        #minimapRibbon {
+            position: absolute;
+            top: 240px;
+            right: 6px;
+            width: 202px;
+            box-sizing: border-box;
+            background: rgba(0,0,0,0.85);
+            border: 1px solid #444;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 3px 4px;
+            font-family: monospace;
+            font-size: 10px;
+            color: #666;
+        }
+        #minimapRibbon #btnHelp {
+            padding: 1px 6px;
+            background: #1a1a1a;
+            color: #c8a82e;
+            border: 1px solid #c8a82e;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 10px;
+            font-weight: bold;
+            line-height: 1;
+        }
+        #minimapRibbon #btnHelp:hover {
+            background: #2a2a1a;
+        }
+        /* Knowledge Base */
+        #knowledgeBaseOverlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+        }
+        #knowledgeBaseOverlay.open {
+            display: flex;
+        }
+        #knowledgeBasePanel {
+            background: #0d0d0d;
+            border: 2px solid #c8a82e;
+            width: 80%;
+            max-width: 900px;
+            height: 80%;
+            max-height: 700px;
+            display: flex;
+            flex-direction: column;
+            font-family: monospace;
+            color: #ccc;
+        }
+        #kbHeader {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 16px;
+            border-bottom: 1px solid #444;
+            background: #111;
+        }
+        #kbHeader h2 {
+            margin: 0;
+            font-size: 16px;
+            color: #c8a82e;
+        }
+        #kbClose {
+            background: none;
+            border: none;
+            color: #c8a82e;
+            font-size: 22px;
+            cursor: pointer;
+        }
+        #kbNav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px;
+            padding: 6px 12px;
+            background: #111;
+            border-bottom: 1px solid #333;
+        }
+        #kbNav button {
+            padding: 4px 10px;
+            background: #1a1a1a;
+            color: #888;
+            border: 1px solid #333;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 11px;
+        }
+        #kbNav button:hover,
+        #kbNav button.active {
+            color: #c8a82e;
+            border-color: #c8a82e;
+            background: #1a1a1a;
+        }
+        #kbContent {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 20px;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        #kbContent h3 {
+            color: #c8a82e;
+            margin: 14px 0 6px;
+            font-size: 14px;
+        }
+        #kbContent h4 {
+            color: #e0c040;
+            margin: 10px 0 4px;
+            font-size: 12px;
+        }
+        #kbContent table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 6px 0;
+        }
+        #kbContent th, #kbContent td {
+            border: 1px solid #333;
+            padding: 3px 8px;
+            text-align: left;
+            font-size: 11px;
+        }
+        #kbContent th {
+            background: #1a1a1a;
+            color: #c8a82e;
+        }
+        #kbContent .kb-tip {
+            color: #88cc88;
+            font-style: italic;
+        }
+        #tooltip {
+            display: none;
+            position: absolute;
+            background: rgba(0,0,0,0.95);
+            border: 1px solid #c8a82e;
+            padding: 6px 10px;
+            font-family: monospace;
+            font-size: 11px;
+            color: #eee;
+            pointer-events: none;
+            z-index: 20;
+            max-width: 250px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <canvas id="uiCanvas"></canvas>
+
+    <!-- Main Menu -->
+    <div id="menuOverlay">
+        <h1>STONEKEEP</h1>
+        <div class="subtitle">A Castle Builder</div>
+        <button id="btnNewGame">New Game</button>
+        <button id="btnContinue" style="display:none">Continue</button>
+    </div>
+
+    <!-- New Game Panel -->
+    <div id="newGamePanel">
+        <h2>NEW GAME</h2>
+        <label for="seedInput">Map Seed</label>
+        <input type="text" id="seedInput" placeholder="Random seed...">
+        <label for="mapSizeSelect">Starting Area</label>
+        <select id="mapSizeSelect" style="width:220px;padding:8px;margin-bottom:14px;font-size:14px;font-family:monospace;background:#1a1a1a;color:#c8a82e;border:1px solid #444;text-align:center;">
+            <option value="128">Small (128×128)</option>
+            <option value="192" selected>Medium (192×192)</option>
+            <option value="256">Large (256×256)</option>
+        </select>
+        <label for="fowToggle">Fog of War</label>
+        <select id="fowToggle" style="width:220px;padding:8px;margin-bottom:14px;font-size:14px;font-family:monospace;background:#1a1a1a;color:#c8a82e;border:1px solid #444;text-align:center;">
+            <option value="on" selected>Enabled</option>
+            <option value="off">Disabled</option>
+        </select>
+        <button id="btnStartGame">Start Game</button>
+        <button id="btnBackToMenu">Back</button>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud">
+        <div id="topBar">
+            <div class="resource-display">Gold: <span id="resGold">0</span></div>
+            <div class="resource-display">Wood: <span id="resWood">0</span></div>
+            <div class="resource-display">Stone: <span id="resStone">0</span></div>
+            <div class="resource-display">Iron: <span id="resIron">0</span></div>
+            <div class="resource-display">Pitch: <span id="resPitch">0</span></div>
+            <div class="resource-display">Pop: <span id="resPop">0</span>/<span id="resPopMax">0</span> (Idle: <span id="resIdle">0</span>)</div>
+            <div class="resource-display">Food: <span id="resFood">0</span></div>
+            <div class="resource-display">Hops: <span id="resHops">0</span></div>
+            <div class="resource-display">Ale: <span id="resAle">0</span></div>
+            <div class="resource-display">Happiness: <span id="resHappiness">50</span></div>
+            <div id="zoomControls">
+                <span id="tpsLabel" style="color:#666;font-size:10px;margin-right:8px;">TPS:<span id="tpsDisplay">0</span></span>
+                <span style="color:#666;font-size:10px;">Zoom:</span>
+                <button id="zoomOut" title="Zoom Out">−</button>
+                <button id="zoomReset" title="Reset Zoom">1×</button>
+                <button id="zoomIn" title="Zoom In">+</button>
+            </div>
+        </div>
+        <canvas id="minimap" width="200" height="200"></canvas>
+        <div id="minimapRibbon">
+            <div id="speedControls">
+                <button data-speed="0">⏸</button>
+                <button data-speed="1" class="active">▶</button>
+                <button data-speed="2">▶▶</button>
+                <button data-speed="3">▶▶▶</button>
+                <button data-speed="4">▶▶▶▶</button>
+                <button data-speed="5">▶▶▶▶▶</button>
+            </div>
+            <button id="btnHelp">?</button>
+        </div>
+        <div id="bottomPanel">
+            <div id="buildMenu"></div>
+            <div id="infoPanel">
+                <h3>Info</h3>
+                <div id="infoContent">Select a tile or building for details.</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tooltip"></div>
+
+    <!-- NPC Details Modal -->
+    <div id="npcDetailsOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100;justify-content:center;align-items:center;">
+        <div id="npcDetailsPanel" style="background:#111;border:2px solid #c8a82e;padding:16px;min-width:280px;max-width:360px;font-family:monospace;color:#ccc;position:relative;">
+            <button id="npcDetailsClose" style="position:absolute;top:4px;right:8px;background:none;border:none;color:#c8a82e;font-size:18px;cursor:pointer;">&times;</button>
+            <div id="npcDetailsContent"></div>
+        </div>
+    </div>
+
+    <!-- Knowledge Base Overlay -->
+    <div id="knowledgeBaseOverlay">
+        <div id="knowledgeBasePanel">
+            <div id="kbHeader">
+                <h2>&#x1F4DC; Stonekeep Knowledge Base</h2>
+                <button id="kbClose">&times;</button>
+            </div>
+            <div id="kbNav"></div>
+            <div id="kbContent"></div>
+        </div>
+    </div>
+
+    <!-- Game Modules -->
+    <script src="src/config.js"></script>
+    <script src="src/utils.js"></script>
+    <script src="src/data/terrain.js"></script>
+    <script src="src/data/resources.js"></script>
+    <script src="src/data/buildings.js"></script>
+    <script src="src/world.js"></script>
+    <script src="src/mapGenerator.js"></script>
+    <script src="src/pathfinding.js"></script>
+    <script src="src/renderer.js"></script>
+    <script src="src/input.js"></script>
+    <script src="src/camera.js"></script>
+    <script src="src/resources.js"></script>
+    <script src="src/buildingPlacement.js"></script>
+    <script src="src/production.js"></script>
+    <script src="src/animal.js"></script>
+    <script src="src/fire.js"></script>
+    <script src="src/npc.js"></script>
+    <script src="src/popularity.js"></script>
+    <script src="src/military.js"></script>
+    <script src="src/events.js"></script>
+    <script src="src/knowledgeBase.js"></script>
+    <script src="src/ui.js"></script>
+    <script src="src/game.js"></script>
+    <script src="src/main.js"></script>
+</body>
+</html>
