@@ -104,8 +104,8 @@ Build your keep, grow your population, manage complex production chains, and def
 - 3 manual save slots with metadata display (day, population, timestamp)
 - Automatic auto-save every 1200 ticks
 - Full state serialization: world, NPCs, buildings, animals, events, time
-- LZW compression for efficient localStorage usage (~4% ratio on tile data)
-- Backward-compatible format with automatic migration of older saves
+- IndexedDB storage backend — virtually unlimited save capacity (many GB)
+- Automatic migration of older localStorage saves to IndexedDB
 - Load from main menu or continue existing games
 
 ### +++ Interface
@@ -131,7 +131,7 @@ Build your keep, grow your population, manage complex production chains, and def
 |  State Management ... Global singletons               |
 |  Pathfinding ........ A* with binary min-heap         |
 |  Map Generation ..... Seeded procedural (Perlin-ish)  |
-|  Persistence ........ localStorage                    |
+|  Persistence ........ IndexedDB                      |
 |  Server ............. Any static file server          |
 |                                                       |
 +-------------------------------------------------------+

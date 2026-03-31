@@ -776,7 +776,7 @@ const KnowledgeBase = {
 <p>Everything: terrain, buildings, NPCs (with their personalities, memories, relationships, mood), resources, animals, fire state, disease clouds, camera position, time of day, and event scheduler state. When loaded, the game resumes exactly where it left off.</p>
 
 <h4>Compression</h4>
-<p>Save data is automatically compressed to fit within the browser's storage limits. Old saves from earlier versions are migrated and compressed automatically. This process is invisible to the player — saving and loading work the same way.</p>
+<p>Save data is stored using the browser's <b>IndexedDB</b> database, which provides virtually unlimited storage (many gigabytes) compared to the old localStorage approach. Objects are stored natively — no JSON serialization or compression overhead. Old saves from earlier versions using localStorage are automatically migrated to IndexedDB on first load.</p>
 
 <p class="kb-tip">Tip: Save before risky decisions like large military orders or building near enemy territory. You can always load a previous save if things go wrong!</p>`;
             }

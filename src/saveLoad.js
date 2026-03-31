@@ -1,56 +1,74 @@
-// Stonekeep - Save/Load System (Phase 3.12)
+// Stonekeep - Save/Load System (Phase 3.12, IndexedDB rewrite Phase 3.12.3)
 'use strict';
 
 const SaveLoad = {
-    SAVE_VERSION: 2,
+    SAVE_VERSION: 3,
     NUM_SLOTS: 3,
-    STORAGE_PREFIX: 'stonekeep_save_',
     AUTO_SAVE_SLOT: 'auto',
     AUTO_SAVE_INTERVAL: 1200, // ticks between auto-saves (~10 min at speed 1)
     _autoSaveAccum: 0,
+    _saving: false, // guard against concurrent saves
 
-    // ── Compression (LZW to fit localStorage quota, Phase 3.12.1) ──
-    _COMPRESS_MARKER: 'STC1',
-    _MAX_DICT: 55294, // max LZW code — output char = code+1 stays below surrogate 0xD800
+    // ── IndexedDB backend (Phase 3.12.3) ──
+    _DB_NAME: 'stonekeep_saves',
+    _DB_VERSION: 1,
+    _STORE_NAME: 'saves',
+    _metaCache: {}, // slot → meta, kept in sync for fast synchronous queries
 
-    _compress(str) {
-        if (!str) return '';
-        // Convert UTF-16 to Latin-1 binary string (UTF-8 bytes)
-        const input = unescape(encodeURIComponent(str));
-        // LZW compress
-        const dict = new Map();
-        for (let i = 0; i < 256; i++) dict.set(String.fromCharCode(i), i);
-        let nextCode = 256;
-        let w = '';
-        const codes = [];
-        for (let i = 0; i < input.length; i++) {
-            const c = input.charAt(i);
-            const wc = w + c;
-            if (dict.has(wc)) {
-                w = wc;
-            } else {
-                codes.push(dict.get(w));
-                if (nextCode <= this._MAX_DICT) dict.set(wc, nextCode++);
-                w = c;
-            }
-        }
-        if (w !== '') codes.push(dict.get(w));
-        // Encode codes as UTF-16 safe string (+1 to avoid null char)
-        const out = new Array(codes.length);
-        for (let i = 0; i < codes.length; i++) {
-            out[i] = String.fromCharCode(codes[i] + 1);
-        }
-        return out.join('');
+    _openDB() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this._DB_NAME, this._DB_VERSION);
+            request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains(this._STORE_NAME)) {
+                    db.createObjectStore(this._STORE_NAME);
+                }
+            };
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
     },
 
-    _decompress(compressed) {
+    _dbGet(key) {
+        return this._openDB().then(db => new Promise((resolve, reject) => {
+            const tx = db.transaction(this._STORE_NAME, 'readonly');
+            const store = tx.objectStore(this._STORE_NAME);
+            const req = store.get(key);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+            tx.oncomplete = () => db.close();
+        }));
+    },
+
+    _dbPut(key, value) {
+        return this._openDB().then(db => new Promise((resolve, reject) => {
+            const tx = db.transaction(this._STORE_NAME, 'readwrite');
+            const store = tx.objectStore(this._STORE_NAME);
+            store.put(value, key);
+            tx.oncomplete = () => { db.close(); resolve(); };
+            tx.onerror = () => { db.close(); reject(tx.error); };
+        }));
+    },
+
+    _dbDelete(key) {
+        return this._openDB().then(db => new Promise((resolve, reject) => {
+            const tx = db.transaction(this._STORE_NAME, 'readwrite');
+            const store = tx.objectStore(this._STORE_NAME);
+            store.delete(key);
+            tx.oncomplete = () => { db.close(); resolve(); };
+            tx.onerror = () => { db.close(); reject(tx.error); };
+        }));
+    },
+
+    // ── Migration from localStorage (Phase 3.12.1 → 3.12.3) ──
+    _COMPRESS_MARKER: 'STC1',
+    _LS_PREFIX: 'stonekeep_save_',
+
+    _lzwDecompress(compressed) {
         if (!compressed) return '';
         const len = compressed.length;
         const codes = new Array(len);
-        for (let i = 0; i < len; i++) {
-            codes[i] = compressed.charCodeAt(i) - 1;
-        }
-        // LZW decompress
+        for (let i = 0; i < len; i++) codes[i] = compressed.charCodeAt(i) - 1;
         const dict = [];
         for (let i = 0; i < 256; i++) dict[i] = String.fromCharCode(i);
         let nextCode = 256;
@@ -68,63 +86,84 @@ const SaveLoad = {
                 return '';
             }
             result.push(entry);
-            if (nextCode <= this._MAX_DICT) {
-                dict[nextCode++] = w + entry.charAt(0);
-            }
+            if (nextCode <= 55294) dict[nextCode++] = w + entry.charAt(0);
             w = entry;
         }
         return decodeURIComponent(escape(result.join('')));
     },
 
-    _migrateOldSaves() {
-        const slots = [this.AUTO_SAVE_SLOT];
-        for (let i = 1; i <= this.NUM_SLOTS; i++) slots.push(String(i));
-        for (const s of slots) {
-            const k = this.STORAGE_PREFIX + s;
-            const raw = localStorage.getItem(k);
-            if (raw && !raw.startsWith(this._COMPRESS_MARKER)) {
-                try {
-                    const compressed = this._COMPRESS_MARKER + this._compress(raw);
-                    localStorage.setItem(k, compressed);
-                } catch (_) { /* skip */ }
+    async _migrateFromLocalStorage() {
+        const slotKeys = [this.AUTO_SAVE_SLOT];
+        for (let i = 1; i <= this.NUM_SLOTS; i++) slotKeys.push(String(i));
+        for (const s of slotKeys) {
+            const lsKey = this._LS_PREFIX + s;
+            const raw = localStorage.getItem(lsKey);
+            if (!raw) continue;
+            try {
+                const json = raw.startsWith(this._COMPRESS_MARKER)
+                    ? this._lzwDecompress(raw.slice(this._COMPRESS_MARKER.length))
+                    : raw;
+                const data = JSON.parse(json);
+                if (data && data.meta) {
+                    data.meta.version = this.SAVE_VERSION;
+                    await this._dbPut('save_' + s, data);
+                    await this._dbPut('meta_' + s, data.meta);
+                }
+                localStorage.removeItem(lsKey);
+            } catch (_) {
+                localStorage.removeItem(lsKey);
             }
         }
+    },
+
+    async _refreshMetaCache() {
+        this._metaCache = {};
+        const slotKeys = [this.AUTO_SAVE_SLOT];
+        for (let i = 1; i <= this.NUM_SLOTS; i++) slotKeys.push(String(i));
+        for (const s of slotKeys) {
+            const meta = await this._dbGet('meta_' + s);
+            if (meta) this._metaCache[s] = meta;
+        }
+    },
+
+    // Called once before UI init — migrates old saves, populates meta cache
+    async init() {
+        await this._migrateFromLocalStorage();
+        await this._refreshMetaCache();
     },
 
     // ── Auto-save tick hook ──
     update() {
         if (World.gamePhase !== 'playing') return;
+        if (this._saving) return;
         this._autoSaveAccum++;
         if (this._autoSaveAccum >= this.AUTO_SAVE_INTERVAL) {
             this._autoSaveAccum = 0;
-            this.save(this.AUTO_SAVE_SLOT, true);
+            this._saving = true;
+            this.save(this.AUTO_SAVE_SLOT, true)
+                .catch(e => console.error('Auto-save failed:', e))
+                .finally(() => { this._saving = false; });
         }
     },
 
-    // ── Public API ──
+    // ── Public API (async) ──
 
-    save(slot, isAuto) {
-        const data = this._serialize();
-        data.meta = {
-            slot: slot,
-            timestamp: Date.now(),
-            day: Time.day,
-            hour: Math.floor(Time.hour),
-            population: World.population,
-            seedDisplay: Game.seedDisplay || '',
-            isAuto: !!isAuto,
-            version: this.SAVE_VERSION
-        };
-        const key = this.STORAGE_PREFIX + slot;
+    async save(slot, isAuto) {
         try {
-            const json = JSON.stringify(data);
-            const stored = this._COMPRESS_MARKER + this._compress(json);
-            try {
-                localStorage.setItem(key, stored);
-            } catch (_) {
-                this._migrateOldSaves();
-                localStorage.setItem(key, stored);
-            }
+            const data = this._serialize();
+            data.meta = {
+                slot: slot,
+                timestamp: Date.now(),
+                day: Time.day,
+                hour: Math.floor(Time.hour),
+                population: World.population,
+                seedDisplay: Game.seedDisplay || '',
+                isAuto: !!isAuto,
+                version: this.SAVE_VERSION
+            };
+            await this._dbPut('save_' + slot, data);
+            await this._dbPut('meta_' + slot, data.meta);
+            this._metaCache[String(slot)] = data.meta;
             if (!isAuto) {
                 Events._notifications.push({
                     text: 'Game saved to slot ' + slot,
@@ -143,15 +182,9 @@ const SaveLoad = {
         }
     },
 
-    load(slot) {
-        const key = this.STORAGE_PREFIX + slot;
-        const raw = localStorage.getItem(key);
-        if (!raw) return false;
+    async load(slot) {
         try {
-            const json = raw.startsWith(this._COMPRESS_MARKER)
-                ? this._decompress(raw.slice(this._COMPRESS_MARKER.length))
-                : raw;
-            const data = JSON.parse(json);
+            const data = await this._dbGet('save_' + slot);
             if (!data || !data.meta) return false;
             this._deserialize(data);
             return true;
@@ -161,31 +194,20 @@ const SaveLoad = {
         }
     },
 
+    // Synchronous — uses cached metadata (populated at init, updated on save/delete)
     getSlotInfo(slot) {
-        const key = this.STORAGE_PREFIX + slot;
-        const raw = localStorage.getItem(key);
-        if (!raw) return null;
-        try {
-            const json = raw.startsWith(this._COMPRESS_MARKER)
-                ? this._decompress(raw.slice(this._COMPRESS_MARKER.length))
-                : raw;
-            const data = JSON.parse(json);
-            return data && data.meta ? data.meta : null;
-        } catch (e) {
-            return null;
-        }
+        return this._metaCache[String(slot)] || null;
     },
 
-    deleteSlot(slot) {
-        localStorage.removeItem(this.STORAGE_PREFIX + slot);
+    async deleteSlot(slot) {
+        await this._dbDelete('save_' + slot);
+        await this._dbDelete('meta_' + slot);
+        delete this._metaCache[String(slot)];
     },
 
+    // Synchronous — uses cached metadata
     hasSaves() {
-        for (let i = 1; i <= this.NUM_SLOTS; i++) {
-            if (this.getSlotInfo(i)) return true;
-        }
-        if (this.getSlotInfo(this.AUTO_SAVE_SLOT)) return true;
-        return false;
+        return Object.keys(this._metaCache).length > 0;
     },
 
     // ── Serialization ──

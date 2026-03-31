@@ -1,9 +1,10 @@
 // Stonekeep - Main Entry Point
 'use strict';
 
-(function() {
+(async function() {
     // Boot sequence
     Renderer.init();
+    await SaveLoad.init(); // IndexedDB migration + meta cache (must run before UI.init)
     UI.init();
     Input.init();
     EventLog.init();

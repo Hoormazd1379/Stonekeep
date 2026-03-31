@@ -1554,8 +1554,8 @@ const UI = {
             btn.textContent = info
                 ? 'Slot ' + i + ' — Day ' + info.day + ', ' + info.population + ' pop (' + new Date(info.timestamp).toLocaleString() + ')'
                 : 'Slot ' + i + ' — Empty';
-            btn.addEventListener('click', () => {
-                SaveLoad.save(i, false);
+            btn.addEventListener('click', async () => {
+                await SaveLoad.save(i, false);
                 overlay.remove();
                 // Ensure Load Game button is visible on menu
                 document.getElementById('btnLoadGame').style.display = 'block';
@@ -1593,8 +1593,8 @@ const UI = {
             btn.style.cssText = 'flex:1;padding:10px;font-family:monospace;font-size:12px;background:#1a1a1a;color:#c8a82e;border:1px solid #444;cursor:pointer;text-align:left';
             if (info) {
                 btn.textContent = s.label + ' — Day ' + info.day + ', ' + info.population + ' pop (' + new Date(info.timestamp).toLocaleString() + ')';
-                btn.addEventListener('click', () => {
-                    SaveLoad.load(s.slot);
+                btn.addEventListener('click', async () => {
+                    await SaveLoad.load(s.slot);
                 });
             } else {
                 btn.textContent = s.label + ' — Empty';
@@ -1609,8 +1609,8 @@ const UI = {
                 delBtn.style.cssText = 'padding:10px;font-family:monospace;font-size:12px;background:#1a1a1a;color:#FF4444;border:1px solid #444;cursor:pointer';
                 delBtn.textContent = 'X';
                 delBtn.title = 'Delete save';
-                delBtn.addEventListener('click', () => {
-                    SaveLoad.deleteSlot(s.slot);
+                delBtn.addEventListener('click', async () => {
+                    await SaveLoad.deleteSlot(s.slot);
                     UI._showLoadPanel(); // refresh
                     if (!SaveLoad.hasSaves()) {
                         document.getElementById('btnLoadGame').style.display = 'none';
