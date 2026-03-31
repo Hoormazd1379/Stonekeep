@@ -89,7 +89,7 @@ Build your keep, grow your population, manage complex production chains, and def
 - **Forward Stockpile** — remote storage for wood, stone, iron, and other non-food resources
 - **Forward Granary** — remote food storage; NPCs eat from the nearest granary
 - Distributed storage with separate inventories per building; total resources pooled for spending
-- Hauler workers automatically balance goods between forward storages and the main stockpile/granary
+- Hauler workers continuously balance each resource type between forward storages and the main stockpile/granary, picking up return cargo at each end for efficient round-trip hauling
 - Frontier alerts in the Event Log when hostiles are spotted
 
 ### +++ Fire System

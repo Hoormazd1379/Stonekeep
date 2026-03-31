@@ -2282,6 +2282,10 @@ const NPC = {
                     npc.carrying = null;
                     npc.carryAmount = 0;
                     npc.walkPurpose = '';
+                    // Check for return cargo to take to main
+                    if (this._haulerFindReturnCargo(npc, building, def)) {
+                        return;
+                    }
                     npc.state = this.STATE.IDLE;
                     return;
                 }
@@ -2308,16 +2312,13 @@ const NPC = {
                 Resources.addToBuilding(building.id, npc.carrying, npc.carryAmount || 1);
                 npc.carrying = null;
                 npc.carryAmount = 0;
+                // Check for return cargo
+                if (this._haulerFindReturnCargo(npc, building, def)) {
+                    return;
+                }
                 npc.state = this.STATE.IDLE;
                 return;
             }
-        }
-
-        // Determine what to haul based on balance check
-        // Only run balance check periodically to avoid constant re-evaluation
-        if (World.tick % CONFIG.HAULER_BALANCE_INTERVAL !== 0 && !npc._haulerTask) {
-            npc.idleReason = 'waiting to rebalance';
-            return;
         }
 
         if (!building.storage) building.storage = {};
@@ -2413,6 +2414,71 @@ const NPC = {
         } else {
             npc.idleReason = 'forward storage balanced';
         }
+    },
+
+    // Hauler return-trip: after depositing at a storage, pick up cargo for the return journey
+    // building = the forward storage building (npc.assignedBuilding)
+    // Returns true if return cargo was found and hauler is now walking with it
+    _haulerFindReturnCargo(npc, building, def) {
+        if (!building.storage) building.storage = {};
+        const nx = Math.floor(npc.x), ny = Math.floor(npc.y);
+        const resourceList = def.forwardOf === 'granary'
+            ? ['apples', 'bread', 'cheese', 'meat']
+            : ['wood', 'stone', 'iron', 'pitch'];
+
+        const isGranary = def.forwardOf === 'granary';
+        const mainSurplusThreshold = isGranary ? 5 : 10;
+        const fwdNeedThreshold = isGranary ? 10 : 15;
+        const fwdSurplusThreshold = isGranary ? 15 : 25;
+        const mainNeedThreshold = isGranary ? 5 : 10;
+
+        const isAtForward = this._isAtBuilding(npc, building);
+
+        if (isAtForward) {
+            // At forward building → check for forward→main cargo
+            for (const res of resourceList) {
+                const fwdAmt = building.storage[res] || 0;
+                const mainAmt = Resources.get(res);
+                if (fwdAmt > fwdSurplusThreshold && mainAmt < mainNeedThreshold) {
+                    const haulerAmount = Math.min(CONFIG.HAULER_CARRY_CAPACITY, fwdAmt - fwdSurplusThreshold);
+                    if (haulerAmount > 0 && Resources.removeFromBuilding(building.id, res, haulerAmount)) {
+                        npc.carrying = res;
+                        npc.carryAmount = haulerAmount;
+                        npc._haulerDeliverTo = 'main';
+                        const mainBuildings = World.getBuildingsOfType(def.forwardOf);
+                        const mainTile = this._findNearestBuildingTileFrom(mainBuildings, nx, ny);
+                        if (mainTile) {
+                            npc._depositBuildingId = mainTile.buildingId;
+                            npc.walkPurpose = 'hauling ' + haulerAmount + ' ' + res + ' to main ' + def.forwardOf;
+                            this._walkTo(npc, mainTile.x, mainTile.y, this.STATE.DELIVER_RESOURCE, this.STATE.DEPOSIT_RESOURCE);
+                            return true;
+                        }
+                        // No main storage found — put resources back
+                        Resources.addToBuilding(building.id, res, haulerAmount);
+                        npc.carrying = null;
+                        npc.carryAmount = 0;
+                    }
+                }
+            }
+        } else {
+            // At main storage → check for main→forward cargo
+            for (const res of resourceList) {
+                const mainAmt = Resources.get(res);
+                const fwdAmt = building.storage[res] || 0;
+                if (mainAmt > mainSurplusThreshold && fwdAmt < fwdNeedThreshold) {
+                    const haulerAmount = Math.min(CONFIG.HAULER_CARRY_CAPACITY, mainAmt - mainSurplusThreshold, fwdNeedThreshold - fwdAmt);
+                    if (haulerAmount > 0 && Resources.remove(res, haulerAmount)) {
+                        npc.carrying = res;
+                        npc.carryAmount = haulerAmount;
+                        npc._haulerDeliverTo = 'forward';
+                        npc.walkPurpose = 'hauling ' + haulerAmount + ' ' + res + ' to ' + def.name;
+                        this._walkTo(npc, building.x, building.y, this.STATE.WALK_TO_WORK, this.STATE.WORKING, { ownBuildingId: building.id });
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     },
 
     // Helper: find nearest walkable tile near main buildings (not forward)
@@ -2708,13 +2774,17 @@ const NPC = {
 
         const def = BUILDINGS[building.type];
 
-        // Forward storage: hauler delivering to building → deposit and go idle
+        // Forward storage: hauler delivering to building → deposit and check return cargo
         if (def.isForwardStorage && npc.carrying && npc._haulerDeliverTo === 'forward') {
             Resources.addToBuilding(building.id, npc.carrying, npc.carryAmount || 1);
             npc.carrying = null;
             npc.carryAmount = 0;
             npc._haulerDeliverTo = null;
             npc.walkPurpose = '';
+            // Check for return cargo to take to main instead of walking back empty
+            if (this._haulerFindReturnCargo(npc, building, def)) {
+                return;
+            }
             npc.state = this.STATE.IDLE;
             return;
         }
@@ -3257,6 +3327,16 @@ const NPC = {
             npc.carryAmount = 0;
         }
         npc._depositBuildingId = null;
+        // Hauler return-trip: after depositing at main, check for return cargo
+        const fwdBuilding = World.buildings.find(b => b.id === npc.assignedBuilding);
+        if (fwdBuilding) {
+            const fwdDef = BUILDINGS[fwdBuilding.type];
+            if (fwdDef && fwdDef.isForwardStorage) {
+                if (this._haulerFindReturnCargo(npc, fwdBuilding, fwdDef)) {
+                    return;
+                }
+            }
+        }
         // Return to work (look for more resources)
         npc.walkPurpose = '';
         npc.idleReason = '';
