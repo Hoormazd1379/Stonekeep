@@ -2331,30 +2331,33 @@ const NPC = {
                 const fwdAmt = building.storage[food] || 0;
                 // Haul from main to forward if main has surplus and forward is low
                 if (mainAmt > 5 && fwdAmt < 10) {
+                    const haulerAmount = Math.min(CONFIG.HAULER_CARRY_CAPACITY, mainAmt - 5, 10 - fwdAmt);
                     npc._haulerDeliverTo = 'forward';
                     npc._pickupType = food;
                     npc.carrying = null;
+                    npc.carryAmount = haulerAmount;
                     // Find main granary to pick up from
                     const mainGranaries = World.getBuildingsOfType('granary');
                     const mainTile = this._findNearestBuildingTileFrom(mainGranaries, nx, ny);
                     if (mainTile) {
                         npc._pickupBuildingId = mainTile.buildingId;
-                        npc.walkPurpose = 'fetching ' + food + ' from main granary';
+                        npc.walkPurpose = 'fetching ' + haulerAmount + ' ' + food + ' from main granary';
                         this._walkTo(npc, mainTile.x, mainTile.y, this.STATE.WALK_TO_PICKUP, this.STATE.PICKUP_RESOURCE);
                         return;
                     }
                 }
                 // Haul from forward to main if forward has surplus and main is low
                 if (fwdAmt > 15 && mainAmt < 5) {
+                    const haulerAmount = Math.min(CONFIG.HAULER_CARRY_CAPACITY, fwdAmt - 15);
                     npc._haulerDeliverTo = 'main';
-                    if (Resources.removeFromBuilding(building.id, food, 1)) {
+                    if (Resources.removeFromBuilding(building.id, food, haulerAmount)) {
                         npc.carrying = food;
-                        npc.carryAmount = 1;
+                        npc.carryAmount = haulerAmount;
                         const mainGranaries = World.getBuildingsOfType('granary');
                         const mainTile = this._findNearestBuildingTileFrom(mainGranaries, nx, ny);
                         if (mainTile) {
                             npc._depositBuildingId = mainTile.buildingId;
-                            npc.walkPurpose = 'hauling ' + food + ' to main granary';
+                            npc.walkPurpose = 'hauling ' + haulerAmount + ' ' + food + ' to main granary';
                             this._walkTo(npc, mainTile.x, mainTile.y, this.STATE.DELIVER_RESOURCE, this.STATE.DEPOSIT_RESOURCE);
                             return;
                         }
@@ -2369,29 +2372,32 @@ const NPC = {
                 const fwdAmt = building.storage[res] || 0;
                 // Haul from main to forward if main has surplus and forward is low
                 if (mainAmt > 10 && fwdAmt < 15) {
+                    const haulerAmount = Math.min(CONFIG.HAULER_CARRY_CAPACITY, mainAmt - 10, 15 - fwdAmt);
                     npc._haulerDeliverTo = 'forward';
                     npc._pickupType = res;
                     npc.carrying = null;
+                    npc.carryAmount = haulerAmount;
                     const mainStockpiles = World.getBuildingsOfType('stockpile');
                     const mainTile = this._findNearestBuildingTileFrom(mainStockpiles, nx, ny);
                     if (mainTile) {
                         npc._pickupBuildingId = mainTile.buildingId;
-                        npc.walkPurpose = 'fetching ' + res + ' from main stockpile';
+                        npc.walkPurpose = 'fetching ' + haulerAmount + ' ' + res + ' from main stockpile';
                         this._walkTo(npc, mainTile.x, mainTile.y, this.STATE.WALK_TO_PICKUP, this.STATE.PICKUP_RESOURCE);
                         return;
                     }
                 }
                 // Haul from forward to main if forward has surplus
                 if (fwdAmt > 25 && mainAmt < 10) {
+                    const haulerAmount = Math.min(CONFIG.HAULER_CARRY_CAPACITY, fwdAmt - 25);
                     npc._haulerDeliverTo = 'main';
-                    if (Resources.removeFromBuilding(building.id, res, 1)) {
+                    if (Resources.removeFromBuilding(building.id, res, haulerAmount)) {
                         npc.carrying = res;
-                        npc.carryAmount = 1;
+                        npc.carryAmount = haulerAmount;
                         const mainStockpiles = World.getBuildingsOfType('stockpile');
                         const mainTile = this._findNearestBuildingTileFrom(mainStockpiles, nx, ny);
                         if (mainTile) {
                             npc._depositBuildingId = mainTile.buildingId;
-                            npc.walkPurpose = 'hauling ' + res + ' to main stockpile';
+                            npc.walkPurpose = 'hauling ' + haulerAmount + ' ' + res + ' to main stockpile';
                             this._walkTo(npc, mainTile.x, mainTile.y, this.STATE.DELIVER_RESOURCE, this.STATE.DEPOSIT_RESOURCE);
                             return;
                         }
@@ -3268,21 +3274,29 @@ const NPC = {
             if (!targetBuilding) {
                 targetBuilding = Resources.getBuildingForTile(Math.floor(npc.x), Math.floor(npc.y));
             }
+            const desiredAmount = npc.carryAmount || 1;
             let picked = false;
+            let pickAmount = 0;
             if (targetBuilding && BUILDINGS[targetBuilding.type] && BUILDINGS[targetBuilding.type].isForwardStorage) {
-                if (Resources.removeFromBuilding(targetBuilding.id, pickupType, 1)) {
+                const available = (targetBuilding.storage && targetBuilding.storage[pickupType]) || 0;
+                pickAmount = Math.min(desiredAmount, available);
+                if (pickAmount > 0 && Resources.removeFromBuilding(targetBuilding.id, pickupType, pickAmount)) {
                     picked = true;
                 }
             }
-            if (!picked && Resources.get(pickupType) > 0) {
-                Resources.remove(pickupType, 1);
-                picked = true;
+            if (!picked) {
+                const available = Resources.get(pickupType);
+                pickAmount = Math.min(desiredAmount, available);
+                if (pickAmount > 0) {
+                    Resources.remove(pickupType, pickAmount);
+                    picked = true;
+                }
             }
             npc._pickupBuildingId = null;
             if (picked) {
                 npc.carrying = pickupType;
-                npc.carryAmount = 1;
-                npc.walkPurpose = 'carrying ' + pickupType + ' to workplace';
+                npc.carryAmount = pickAmount;
+                npc.walkPurpose = 'carrying ' + pickAmount + ' ' + pickupType + ' to workplace';
 
                 // Walk back to assigned building
                 const building = World.buildings.find(b => b.id === npc.assignedBuilding);

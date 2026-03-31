@@ -211,6 +211,7 @@ const CONFIG = {
     WATCHTOWER_VISION_RADIUS: 30,     // Large vision radius for watchtowers
     GUARD_POST_VISION_RADIUS: 15,     // Same vision radius as an NPC
     HAULER_BALANCE_INTERVAL: 64,      // Ticks between forward storage balance checks
+    HAULER_CARRY_CAPACITY: 5,         // Max units a hauler can carry per trip
 
     // Fatigue rates by building type (multiplier on FATIGUE_WORK_BASE)
     FATIGUE_RATES: {

@@ -193,10 +193,10 @@ const KnowledgeBase = {
 <tr><th>Building</th><th>Cost</th><th>Notes</th></tr>
 <tr><td>Watchtower</td><td>20 wood, 15 stone</td><td>2×2. Vision radius 30. Auto-fires at enemies (range 16, 1.5× height bonus).</td></tr>
 <tr><td>Guard Post</td><td>10 wood, 5 stone</td><td>1×1. Vision radius 15. Auto-fires at enemies (range 8). Flammable.</td></tr>
-<tr><td>Forward Stockpile</td><td>15 wood, 5 stone</td><td>2×2. 2 hauler workers. Local resource storage near frontier.</td></tr>
-<tr><td>Forward Granary</td><td>15 wood</td><td>2×2. 2 hauler workers. Local food storage near frontier.</td></tr>
+<tr><td>Forward Stockpile</td><td>15 wood, 5 stone</td><td>2×2. 2 hauler workers (carry up to 5 units per trip). Local resource storage near frontier.</td></tr>
+<tr><td>Forward Granary</td><td>15 wood</td><td>2×2. 2 hauler workers (carry up to 5 units per trip). Local food storage near frontier.</td></tr>
 </table>
-<p><b>Frontier Logistics:</b> Forward Stockpiles and Forward Granaries maintain their own local inventory. Production workers deposit directly into the nearest forward storage when it is closer than the main stockpile or granary. Processors and other workers pick up resources from the nearest storage that has them. Hungry NPCs and troops eat from the nearest granary (main or forward) with food available. Hauler workers automatically balance supplies between main and forward storages. If a forward storage is destroyed, ALL stored supplies are lost.</p>
+<p><b>Frontier Logistics:</b> Forward Stockpiles and Forward Granaries maintain their own local inventory. Production workers deposit directly into the nearest forward storage when it is closer than the main stockpile or granary. Processors and other workers pick up resources from the nearest storage that has them. Hungry NPCs and troops eat from the nearest granary (main or forward) with food available. Hauler workers automatically balance supplies between main and forward storages, carrying up to 5 units of a single resource type per trip based on current supply and demand. If a forward storage is destroyed, ALL stored supplies are lost.</p>
 <p><b>Defensive Buildings:</b> The Keep, Watchtowers, and Guard Posts automatically fire at nearby bandits and hostile animals. Watchtowers benefit from a 1.5× height damage bonus. Event alerts appear when frontier defenses engage enemies.</p>
 
 <h4>Fear Factor Buildings</h4>
