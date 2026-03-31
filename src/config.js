@@ -202,6 +202,16 @@ const CONFIG = {
     HEALTH_REGEN_PER_HOUR: 1,    // HP restored per hour while sleeping (not starving/diseased)
     LOW_HEALTH_THRESHOLD: 0.3,   // Below 30% HP: reduced speed/output
 
+    // Building auto-fire (Phase 4.1)
+    BUILDING_FIRE_COOLDOWN: 4,        // Ticks between building projectile shots
+    KEEP_FIRE_RANGE: 16,              // Keep shoots at 2× archer range (archer=8)
+    WATCHTOWER_FIRE_RANGE: 16,        // Watchtower shoots at 2× archer range
+    GUARD_POST_FIRE_RANGE: 8,         // Guard post shoots at archer range
+    BUILDING_FIRE_DAMAGE: 2,          // Same damage as one archer
+    WATCHTOWER_VISION_RADIUS: 30,     // Large vision radius for watchtowers
+    GUARD_POST_VISION_RADIUS: 15,     // Same vision radius as an NPC
+    HAULER_BALANCE_INTERVAL: 64,      // Ticks between forward storage balance checks
+
     // Fatigue rates by building type (multiplier on FATIGUE_WORK_BASE)
     FATIGUE_RATES: {
         quarry: 2.0,              // Heavy labor
@@ -225,7 +235,9 @@ const CONFIG = {
         cathedral: 0.5,           // Light
         well: 1.2,                // Moderate (firefighting)
         apothecary: 0.8,          // Light
-        inn: 0.6                  // Light
+        inn: 0.6,                 // Light
+        forwardStockpile: 1.3,    // Moderate (hauling goods)
+        forwardGranary: 1.3       // Moderate (hauling food)
     },
 
     // Colors

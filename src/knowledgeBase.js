@@ -188,6 +188,17 @@ const KnowledgeBase = {
 <tr><td>Pitch Ditch</td><td>1g + 1 pitch</td><td>Flammable trap. Ignitable.</td></tr>
 </table>
 
+<h4>Frontier</h4>
+<table>
+<tr><th>Building</th><th>Cost</th><th>Notes</th></tr>
+<tr><td>Watchtower</td><td>20 wood, 15 stone</td><td>2×2. Vision radius 30. Auto-fires at enemies (range 16, 1.5× height bonus).</td></tr>
+<tr><td>Guard Post</td><td>10 wood, 5 stone</td><td>1×1. Vision radius 15. Auto-fires at enemies (range 8). Flammable.</td></tr>
+<tr><td>Forward Stockpile</td><td>15 wood, 5 stone</td><td>2×2. 2 hauler workers. Local resource storage near frontier.</td></tr>
+<tr><td>Forward Granary</td><td>15 wood</td><td>2×2. 2 hauler workers. Local food storage near frontier.</td></tr>
+</table>
+<p><b>Frontier Logistics:</b> Forward Stockpiles and Forward Granaries maintain their own local inventory. Hauler workers automatically balance supplies between main and forward storages. Troops and workers near forward storages will eat from the nearest available food source. If a forward storage is destroyed, ALL stored supplies are lost.</p>
+<p><b>Defensive Buildings:</b> The Keep, Watchtowers, and Guard Posts automatically fire at nearby bandits and hostile animals. Watchtowers benefit from a 1.5× height damage bonus. Event alerts appear when frontier defenses engage enemies.</p>
+
 <h4>Fear Factor Buildings</h4>
 <p><b>Good Things</b> (Fear −1 each): Gardens (10 wood), Maypole (10 wood), Statue (10 stone), Shrine (10 stone + 100g)</p>
 <p><b>Bad Things</b> (Fear +1 each): Gallows (5 wood), Stocks (5 wood), Dungeon (10 stone), Gibbet (5 wood + 5 iron)</p>`;
@@ -235,7 +246,10 @@ const KnowledgeBase = {
 <tr><td>Archer</td><td>8</td><td>2</td><td>6</td><td>30%</td></tr>
 </table>
 <p>Bandits attack buildings (2 damage per 6 ticks). Building HP = width × height × 10.</p>
-<p>Raid size: 3 base + 1 per 15 population (max 12).</p>`;
+<p>Raid size: 3 base + 1 per 15 population (max 12).</p>
+
+<h4>Building Auto-Fire</h4>
+<p>The <b>Keep</b>, <b>Watchtowers</b>, and <b>Guard Posts</b> automatically fire at bandits and hostile animals within range. Watchtowers and the Keep have range 16; Guard Posts have range 8. Damage is enhanced by the fear factor bonus. Watchtowers get a 1.5× height bonus to damage.</p>`;
             }
         },
 

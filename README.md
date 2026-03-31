@@ -81,6 +81,16 @@ Build your keep, grow your population, manage complex production chains, and def
 - Barracks recruitment from weapon stockpiles
 - Bandit raids that scale with population
 - Moat and pitch ditch fire traps
+- Keep, Watchtower, and Guard Post auto-fire at hostiles (no NPC required)
+
+### +++ Frontier & Outposts
+- **Watchtower** — 2×2 tower with 30-tile vision radius and long-range auto-fire
+- **Guard Post** — cheap 1×1 outpost with NPC-range vision and auto-fire
+- **Forward Stockpile** — remote storage for wood, stone, iron, and other non-food resources
+- **Forward Granary** — remote food storage; NPCs eat from the nearest granary
+- Distributed storage with separate inventories per building; total resources pooled for spending
+- Hauler workers automatically balance goods between forward storages and the main stockpile/granary
+- Frontier alerts in the Event Log when hostiles are spotted
 
 ### +++ Fire System
 - Dynamic fire spread between adjacent buildings

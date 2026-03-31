@@ -205,6 +205,14 @@ const Fire = {
             }
         }
 
+        // Forward storage destruction: lose ALL building inventory
+        if (def.isForwardStorage && building.storage) {
+            for (const res in building.storage) {
+                building.storage[res] = 0;
+            }
+            EventLog.add('danger', def.name + ' supplies were lost!', building.x, building.y);
+        }
+
         // Reduce max population if housing was destroyed
         if (def.housing) {
             World.maxPopulation -= def.housing;

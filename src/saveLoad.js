@@ -384,7 +384,11 @@ const SaveLoad = {
             _reservedTreeKey: n._reservedTreeKey || null,
             _reservedAnimalId: n._reservedAnimalId || null,
             _huntTarget: n._huntTarget || null,
-            _carcassTarget: n._carcassTarget || null
+            _carcassTarget: n._carcassTarget || null,
+            // Hauler / forward storage
+            _haulerDeliverTo: n._haulerDeliverTo || null,
+            _pickupType: n._pickupType || null,
+            _eatingAtBuildingId: n._eatingAtBuildingId || null
         };
 
         // Troop-specific
@@ -733,7 +737,11 @@ const SaveLoad = {
             _reservedTreeKey: n._reservedTreeKey || null,
             _reservedAnimalId: n._reservedAnimalId || null,
             _huntTarget: n._huntTarget || null,
-            _carcassTarget: n._carcassTarget || null
+            _carcassTarget: n._carcassTarget || null,
+            // Hauler / forward storage
+            _haulerDeliverTo: n._haulerDeliverTo || null,
+            _pickupType: n._pickupType || null,
+            _eatingAtBuildingId: n._eatingAtBuildingId || null
         };
 
         // Troop-specific

@@ -452,6 +452,54 @@ const UI = {
             this._addBarracksActions(menu);
         }
 
+        // Forward storage inventory display
+        if (def.isForwardStorage && building.storage) {
+            const invDiv = document.createElement('div');
+            invDiv.className = 'build-category';
+            const invTitle = document.createElement('div');
+            invTitle.className = 'build-category-title';
+            invTitle.textContent = 'Stored Supplies';
+            invDiv.appendChild(invTitle);
+
+            const entries = Object.entries(building.storage).filter(([, amt]) => amt > 0);
+            if (entries.length === 0) {
+                const emptyRow = document.createElement('div');
+                emptyRow.style.cssText = 'font-size:11px;padding:2px 4px;color:#888;';
+                emptyRow.textContent = 'Empty — haulers will deliver supplies';
+                invDiv.appendChild(emptyRow);
+            } else {
+                for (const [res, amt] of entries) {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'font-size:11px;padding:2px 4px;color:#ccc;';
+                    row.innerHTML = `<span style="color:#c8a82e">${res}</span>: ${amt}`;
+                    invDiv.appendChild(row);
+                }
+            }
+            menu.appendChild(invDiv);
+        }
+
+        // Auto-fire info for defensive buildings
+        if (def.autoFire) {
+            const fireDiv = document.createElement('div');
+            fireDiv.className = 'build-category';
+            const fireTitle = document.createElement('div');
+            fireTitle.className = 'build-category-title';
+            fireTitle.textContent = 'Defense';
+            fireDiv.appendChild(fireTitle);
+            const fireRow = document.createElement('div');
+            fireRow.style.cssText = 'font-size:11px;padding:2px 4px;color:#aaa;';
+            fireRow.innerHTML = `Range: <span style="color:#FFDD44">${def.autoFireRange || 8}</span> | Damage: <span style="color:#FF6644">${def.autoFireDamage || 2}</span>`;
+            if (def.isTower) fireRow.innerHTML += ` | <span style="color:#88ccff">Height bonus: 1.5x</span>`;
+            fireDiv.appendChild(fireRow);
+            if (def.visionRadius) {
+                const visRow = document.createElement('div');
+                visRow.style.cssText = 'font-size:11px;padding:2px 4px;color:#aaa;';
+                visRow.innerHTML = `Vision: <span style="color:#88ff88">${def.visionRadius} tiles</span>`;
+                fireDiv.appendChild(visRow);
+            }
+            menu.appendChild(fireDiv);
+        }
+
         // ── Schedule & Status info for worker buildings ──
         if (def.workers && def.workers > 0) {
             const schedDiv = document.createElement('div');

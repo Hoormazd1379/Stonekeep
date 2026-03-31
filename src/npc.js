@@ -610,13 +610,13 @@ const NPC = {
             npc.foodTypesEaten = [];
             npc.lastAteDay = Time.day;
         }
-        // Prefer food types not yet eaten today
+        // Prefer food types not yet eaten today (check all storages)
         for (const f of foodTypes) {
-            if (!npc.foodTypesEaten.includes(f) && Resources.get(f) > 0) return f;
+            if (!npc.foodTypesEaten.includes(f) && Resources.getTotal(f) > 0) return f;
         }
         // Otherwise eat any available food
         for (const f of foodTypes) {
-            if (Resources.get(f) > 0) return f;
+            if (Resources.getTotal(f) > 0) return f;
         }
         return null;
     },
@@ -836,16 +836,36 @@ const NPC = {
             npc._hungerAccum = 0;
             npc.hunger = Math.max(0, npc.hunger - CONFIG.HUNGER_DRAIN_PER_HOUR);
         }
-        // Auto-eat from granary every TROOP_HUNGER_INTERVAL ticks
+        // Auto-eat from nearest granary (main or forward) every TROOP_HUNGER_INTERVAL ticks
         if (npc.hunger < CONFIG.HUNGER_EAT_THRESHOLD && World.tick % CONFIG.TROOP_HUNGER_INTERVAL === 0) {
             for (let i = 0; i < 2; i++) {
                 const food = this._chooseFoodToEat(npc);
                 if (food) {
-                    Resources.remove(food, 1);
-                    npc.hunger = Math.min(CONFIG.HUNGER_MAX, npc.hunger + this._getMealRestore());
-                    npc.lastAteType = food;
-                    if (!npc.foodTypesEaten) npc.foodTypesEaten = [];
-                    if (!npc.foodTypesEaten.includes(food)) npc.foodTypesEaten.push(food);
+                    // Try forward granary near troop first, then main storage
+                    const nx = Math.floor(npc.x), ny = Math.floor(npc.y);
+                    const nearGranary = Resources.findNearestGranaryWithFood(nx, ny);
+                    let consumed = false;
+                    if (nearGranary && nearGranary.buildingId) {
+                        const bld = World.buildings.find(b => b.id === nearGranary.buildingId);
+                        if (bld && bld.storage && (bld.storage[food] || 0) > 0) {
+                            Resources.removeFromBuilding(nearGranary.buildingId, food, 1);
+                            consumed = true;
+                        }
+                    }
+                    if (!consumed) {
+                        if (Resources.get(food) > 0) {
+                            Resources.remove(food, 1);
+                            consumed = true;
+                        }
+                    }
+                    if (consumed) {
+                        npc.hunger = Math.min(CONFIG.HUNGER_MAX, npc.hunger + this._getMealRestore());
+                        npc.lastAteType = food;
+                        if (!npc.foodTypesEaten) npc.foodTypesEaten = [];
+                        if (!npc.foodTypesEaten.includes(food)) npc.foodTypesEaten.push(food);
+                    } else {
+                        break;
+                    }
                 } else {
                     break;
                 }
@@ -1310,8 +1330,16 @@ const NPC = {
             return;
         }
 
-        // Find granary
-        const granary = World.buildings.find(b => b.type === 'granary');
+        // Find nearest granary or forward granary with food
+        const nx = Math.floor(npc.x), ny = Math.floor(npc.y);
+        const target = Resources.findNearestGranaryWithFood(nx, ny);
+        if (!target) {
+            npc.idleReason = 'hungry - no granary';
+            this._freeTimeBehavior(npc);
+            return;
+        }
+
+        const granary = World.buildings.find(b => b.id === target.buildingId);
         if (!granary) {
             npc.idleReason = 'hungry - no granary';
             this._freeTimeBehavior(npc);
@@ -1324,12 +1352,14 @@ const NPC = {
             npc.walkPurpose = 'eating';
             npc._eatTimer = 0;
             npc._eatingFoodType = foodType;
+            npc._eatingAtBuildingId = granary.id;
             return;
         }
 
         // Walk to granary — pass ownBuildingId so granary tiles are passable for pathfinding
         npc.walkPurpose = 'going to eat';
         npc._eatingFoodType = foodType;
+        npc._eatingAtBuildingId = granary.id;
         this._walkTo(npc, granary.x, granary.y, this.STATE.WALK_TO_EAT, this.STATE.EATING, { ownBuildingId: granary.id });
     },
 
@@ -1338,10 +1368,19 @@ const NPC = {
         if (npc._eatTimer >= CONFIG.HUNGER_EAT_TICKS) {
             // Consume up to 2 food units per meal to fill hunger completely
             const unitsToEat = 2;
+            const eatBuilding = npc._eatingAtBuildingId ? World.buildings.find(b => b.id === npc._eatingAtBuildingId) : null;
+            const isForward = eatBuilding && BUILDINGS[eatBuilding.type] && BUILDINGS[eatBuilding.type].isForwardStorage;
             for (let i = 0; i < unitsToEat; i++) {
                 const foodType = npc._eatingFoodType || this._chooseFoodToEat(npc);
-                if (foodType && Resources.get(foodType) > 0) {
-                    Resources.remove(foodType, 1);
+                if (!foodType) break;
+                let consumed = false;
+                if (isForward) {
+                    consumed = Resources.removeFromBuilding(eatBuilding.id, foodType, 1);
+                }
+                if (!consumed && Resources.get(foodType) > 0) {
+                    consumed = Resources.remove(foodType, 1);
+                }
+                if (consumed) {
                     const restore = this._getMealRestore();
                     npc.hunger = Math.min(CONFIG.HUNGER_MAX, npc.hunger + restore);
                     npc.lastAteType = foodType;
@@ -1357,6 +1396,7 @@ const NPC = {
             }
             npc._eatTimer = 0;
             npc._eatingFoodType = null;
+            npc._eatingAtBuildingId = null;
             npc.state = this.STATE.IDLE;
             npc.walkPurpose = '';
         }
@@ -2122,6 +2162,12 @@ const NPC = {
             return;
         }
 
+        // Forward storage building: hauler cycle (balance resources between main and forward)
+        if (def.isForwardStorage) {
+            this._startHaulerCycle(npc, building, def);
+            return;
+        }
+
         // Producer building (farm, orchard, dairy): walk to building and work
         if (def.produces && !def.consumes) {
             this._startProducerCycle(npc, building, def);
@@ -2176,8 +2222,8 @@ const NPC = {
             return;
         }
 
-        // Need to fetch input: check if any input is available globally
-        if (Resources.get(def.consumes) <= 0) {
+        // Need to fetch input: check if any input is available (main + forward storages)
+        if (Resources.getTotal(def.consumes) <= 0) {
             // No input available, wait at building
             if (!this._isAtBuilding(npc, building)) {
                 npc.walkPurpose = 'walking to ' + def.name + ' (waiting for ' + def.consumes + ')';
@@ -2194,6 +2240,165 @@ const NPC = {
         npc._pickupType = def.consumes;
         npc.walkPurpose = 'fetching ' + def.consumes + ' from storage';
         this._walkTo(npc, storage.x, storage.y, this.STATE.WALK_TO_PICKUP, this.STATE.PICKUP_RESOURCE);
+    },
+
+    // ── Hauler worker cycle (Forward Stockpile / Forward Granary) ──
+    // Haul goods from main storage to forward storage and vice versa to balance supply
+    _startHaulerCycle(npc, building, def) {
+        const nx = Math.floor(npc.x), ny = Math.floor(npc.y);
+
+        // If already carrying something, deliver it
+        if (npc.carrying) {
+            if (npc._haulerDeliverTo === 'forward') {
+                // Deliver to forward storage building
+                if (this._isAtBuilding(npc, building)) {
+                    Resources.addToBuilding(building.id, npc.carrying, npc.carryAmount || 1);
+                    npc.carrying = null;
+                    npc.carryAmount = 0;
+                    npc.walkPurpose = '';
+                    npc.state = this.STATE.IDLE;
+                    return;
+                }
+                npc.walkPurpose = 'hauling ' + npc.carrying + ' to ' + def.name;
+                this._walkTo(npc, building.x, building.y, this.STATE.WALK_TO_WORK, this.STATE.WORKING, { ownBuildingId: building.id });
+                return;
+            } else {
+                // Deliver to main storage
+                const mainStorage = def.forwardOf === 'granary'
+                    ? Resources.findNearestGranary(nx, ny)
+                    : Resources.findNearestStockpile(nx, ny);
+                if (mainStorage) {
+                    // Filter: find a MAIN storage (not forward)
+                    const mainBuildings = World.getBuildingsOfType(def.forwardOf);
+                    const mainTile = this._findNearestBuildingTileFrom(mainBuildings, nx, ny);
+                    if (mainTile) {
+                        npc.walkPurpose = 'hauling ' + npc.carrying + ' to main ' + def.forwardOf;
+                        this._walkTo(npc, mainTile.x, mainTile.y, this.STATE.DELIVER_RESOURCE, this.STATE.DEPOSIT_RESOURCE);
+                        return;
+                    }
+                }
+                // No main storage found — just drop at building
+                Resources.addToBuilding(building.id, npc.carrying, npc.carryAmount || 1);
+                npc.carrying = null;
+                npc.carryAmount = 0;
+                npc.state = this.STATE.IDLE;
+                return;
+            }
+        }
+
+        // Determine what to haul based on balance check
+        // Only run balance check periodically to avoid constant re-evaluation
+        if (World.tick % CONFIG.HAULER_BALANCE_INTERVAL !== 0 && !npc._haulerTask) {
+            npc.idleReason = 'waiting to rebalance';
+            return;
+        }
+
+        if (!building.storage) building.storage = {};
+
+        if (def.forwardOf === 'granary') {
+            // Forward Granary: haul food from main to forward
+            const foodTypes = ['apples', 'bread', 'cheese', 'meat'];
+            // Check what's low in the forward storage
+            for (const food of foodTypes) {
+                const mainAmt = Resources.get(food);
+                const fwdAmt = building.storage[food] || 0;
+                // Haul from main to forward if main has surplus and forward is low
+                if (mainAmt > 5 && fwdAmt < 10) {
+                    npc._haulerDeliverTo = 'forward';
+                    npc._pickupType = food;
+                    npc.carrying = null;
+                    // Find main granary to pick up from
+                    const mainGranaries = World.getBuildingsOfType('granary');
+                    const mainTile = this._findNearestBuildingTileFrom(mainGranaries, nx, ny);
+                    if (mainTile) {
+                        npc.walkPurpose = 'fetching ' + food + ' from main granary';
+                        this._walkTo(npc, mainTile.x, mainTile.y, this.STATE.WALK_TO_PICKUP, this.STATE.PICKUP_RESOURCE);
+                        return;
+                    }
+                }
+                // Haul from forward to main if forward has surplus and main is low
+                if (fwdAmt > 15 && mainAmt < 5) {
+                    npc._haulerDeliverTo = 'main';
+                    if (Resources.removeFromBuilding(building.id, food, 1)) {
+                        npc.carrying = food;
+                        npc.carryAmount = 1;
+                        const mainGranaries = World.getBuildingsOfType('granary');
+                        const mainTile = this._findNearestBuildingTileFrom(mainGranaries, nx, ny);
+                        if (mainTile) {
+                            npc.walkPurpose = 'hauling ' + food + ' to main granary';
+                            this._walkTo(npc, mainTile.x, mainTile.y, this.STATE.DELIVER_RESOURCE, this.STATE.DEPOSIT_RESOURCE);
+                            return;
+                        }
+                    }
+                }
+            }
+        } else {
+            // Forward Stockpile: haul key resources from main to forward
+            const keyResources = ['wood', 'stone', 'iron', 'pitch'];
+            for (const res of keyResources) {
+                const mainAmt = Resources.get(res);
+                const fwdAmt = building.storage[res] || 0;
+                // Haul from main to forward if main has surplus and forward is low
+                if (mainAmt > 10 && fwdAmt < 15) {
+                    npc._haulerDeliverTo = 'forward';
+                    npc._pickupType = res;
+                    npc.carrying = null;
+                    const mainStockpiles = World.getBuildingsOfType('stockpile');
+                    const mainTile = this._findNearestBuildingTileFrom(mainStockpiles, nx, ny);
+                    if (mainTile) {
+                        npc.walkPurpose = 'fetching ' + res + ' from main stockpile';
+                        this._walkTo(npc, mainTile.x, mainTile.y, this.STATE.WALK_TO_PICKUP, this.STATE.PICKUP_RESOURCE);
+                        return;
+                    }
+                }
+                // Haul from forward to main if forward has surplus
+                if (fwdAmt > 25 && mainAmt < 10) {
+                    npc._haulerDeliverTo = 'main';
+                    if (Resources.removeFromBuilding(building.id, res, 1)) {
+                        npc.carrying = res;
+                        npc.carryAmount = 1;
+                        const mainStockpiles = World.getBuildingsOfType('stockpile');
+                        const mainTile = this._findNearestBuildingTileFrom(mainStockpiles, nx, ny);
+                        if (mainTile) {
+                            npc.walkPurpose = 'hauling ' + res + ' to main stockpile';
+                            this._walkTo(npc, mainTile.x, mainTile.y, this.STATE.DELIVER_RESOURCE, this.STATE.DEPOSIT_RESOURCE);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Nothing to haul — idle at building
+        if (!this._isAtBuilding(npc, building)) {
+            npc.walkPurpose = 'returning to ' + def.name;
+            this._walkTo(npc, building.x, building.y, this.STATE.WALK_TO_WORK, this.STATE.IDLE, { ownBuildingId: building.id });
+        } else {
+            npc.idleReason = 'forward storage balanced';
+        }
+    },
+
+    // Helper: find nearest walkable tile near main buildings (not forward)
+    _findNearestBuildingTileFrom(buildings, fromX, fromY) {
+        if (buildings.length === 0) return null;
+        let best = null, bestDist = Infinity;
+        for (const b of buildings) {
+            const bDef = BUILDINGS[b.type];
+            for (let dy = -1; dy <= bDef.height; dy++) {
+                for (let dx = -1; dx <= bDef.width; dx++) {
+                    const tx = b.x + dx;
+                    const ty = b.y + dy;
+                    if (World.isWalkable(tx, ty)) {
+                        const d = Utils.manhattan(fromX, fromY, tx, ty);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            best = { x: tx, y: ty, buildingId: b.id };
+                        }
+                    }
+                }
+            }
+        }
+        return best;
     },
 
     // ── Priest worker cycle ──
@@ -2465,6 +2670,17 @@ const NPC = {
         }
 
         const def = BUILDINGS[building.type];
+
+        // Forward storage: hauler delivering to building → deposit and go idle
+        if (def.isForwardStorage && npc.carrying && npc._haulerDeliverTo === 'forward') {
+            Resources.addToBuilding(building.id, npc.carrying, npc.carryAmount || 1);
+            npc.carrying = null;
+            npc.carryAmount = 0;
+            npc._haulerDeliverTo = null;
+            npc.walkPurpose = '';
+            npc.state = this.STATE.IDLE;
+            return;
+        }
 
         // Periodic tool animation while working
         if (World.tick % 8 === 0) {
@@ -2982,7 +3198,13 @@ const NPC = {
         this._releaseAnimalReservation(npc);
         if (npc.carrying) {
             npc.walkPurpose = 'depositing ' + npc.carrying;
-            Resources.add(npc.carrying, npc.carryAmount);
+            // Check if NPC is at a forward storage — deposit to building inventory
+            const atBuilding = Resources.getBuildingForTile(Math.floor(npc.x), Math.floor(npc.y));
+            if (atBuilding && BUILDINGS[atBuilding.type] && BUILDINGS[atBuilding.type].isForwardStorage) {
+                Resources.addToBuilding(atBuilding.id, npc.carrying, npc.carryAmount);
+            } else {
+                Resources.add(npc.carrying, npc.carryAmount);
+            }
             npc.carrying = null;
             npc.carryAmount = 0;
         }
@@ -2994,24 +3216,41 @@ const NPC = {
 
     _pickupResource(npc) {
         const pickupType = npc._pickupType;
-        if (pickupType && Resources.get(pickupType) > 0) {
-            Resources.remove(pickupType, 1);
-            npc.carrying = pickupType;
-            npc.carryAmount = 1;
-            npc.walkPurpose = 'carrying ' + pickupType + ' to workplace';
+        if (pickupType) {
+            // Try to pick up from the building NPC is standing at (forward storage)
+            const atBuilding = Resources.getBuildingForTile(Math.floor(npc.x), Math.floor(npc.y));
+            let picked = false;
+            if (atBuilding && BUILDINGS[atBuilding.type] && BUILDINGS[atBuilding.type].isForwardStorage) {
+                if (Resources.removeFromBuilding(atBuilding.id, pickupType, 1)) {
+                    picked = true;
+                }
+            }
+            if (!picked && Resources.get(pickupType) > 0) {
+                Resources.remove(pickupType, 1);
+                picked = true;
+            }
+            if (picked) {
+                npc.carrying = pickupType;
+                npc.carryAmount = 1;
+                npc.walkPurpose = 'carrying ' + pickupType + ' to workplace';
 
-            // Walk back to assigned building
-            const building = World.buildings.find(b => b.id === npc.assignedBuilding);
-            if (building) {
-                this._walkTo(npc, building.x, building.y, this.STATE.RETURN_TO_WORK, this.STATE.WORKING, { ownBuildingId: building.id });
+                // Walk back to assigned building
+                const building = World.buildings.find(b => b.id === npc.assignedBuilding);
+                if (building) {
+                    this._walkTo(npc, building.x, building.y, this.STATE.RETURN_TO_WORK, this.STATE.WORKING, { ownBuildingId: building.id });
+                } else {
+                    npc.idleReason = 'building destroyed';
+                    npc.state = this.STATE.IDLE;
+                }
             } else {
-                npc.idleReason = 'building destroyed';
+                // Resource no longer available, go back idle
+                npc.walkPurpose = '';
+                npc.idleReason = 'waiting for ' + (pickupType || 'resource');
                 npc.state = this.STATE.IDLE;
             }
         } else {
-            // Resource no longer available, go back idle
             npc.walkPurpose = '';
-            npc.idleReason = 'waiting for ' + (pickupType || 'resource');
+            npc.idleReason = 'waiting for resource';
             npc.state = this.STATE.IDLE;
         }
     },

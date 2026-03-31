@@ -108,6 +108,9 @@ const Game = {
         // Update vision — NPCs discover tiles within vision radius
         this._updateVision();
 
+        // Building auto-fire — buildings with autoFire shoot enemies (Phase 4.1)
+        this._updateBuildingAutoFire();
+
         // Food consumption is now handled per-NPC via hunger system (Phase 3.3)
 
         // Road decay (every 1200 ticks, reduce road levels by 1)
@@ -252,6 +255,36 @@ const Game = {
             }
         }
 
+        // Building vision: watchtowers and guard posts reveal tiles (Phase 4.1)
+        for (const building of World.buildings) {
+            const bDef = BUILDINGS[building.type];
+            if (!bDef || !bDef.visionRadius) continue;
+            if (building.active === false) continue;
+            const bvr = bDef.visionRadius;
+            const bvr2 = bvr * bvr;
+            const bcx = building.x + Math.floor(bDef.width / 2);
+            const bcy = building.y + Math.floor(bDef.height / 2);
+            for (let dy = -bvr; dy <= bvr; dy++) {
+                for (let dx = -bvr; dx <= bvr; dx++) {
+                    if (dx * dx + dy * dy > bvr2) continue;
+                    const tx = bcx + dx;
+                    const ty = bcy + dy;
+                    if (!Utils.inBounds(tx, ty, World.width, World.height)) continue;
+                    World._ensureTile(tx, ty);
+                    const tile = World.tiles[ty][tx];
+                    if (!tile.discovered) {
+                        const chunkX = Math.floor(tx / cs);
+                        const chunkY = Math.floor(ty / cs);
+                        if (!World.isChunkGenerated(chunkX, chunkY)) {
+                            MapGenerator.generateChunk(chunkX, chunkY);
+                        }
+                        tile.discovered = true;
+                    }
+                    tile.lastSeenTick = World.tick;
+                }
+            }
+        }
+
         // Road-based vision: road tiles provide visibility radius = 1 + roadLevel
         // Only check roads within camera viewport + margin for performance
         const camStartX = Math.max(0, Math.floor(Camera.x / CONFIG.TILE_WIDTH) - 2);
@@ -275,6 +308,75 @@ const Game = {
                             tile.lastSeenTick = World.tick;
                         }
                     }
+                }
+            }
+        }
+    },
+
+    // Building auto-fire: buildings with autoFire property shoot nearby enemies (Phase 4.1)
+    _updateBuildingAutoFire() {
+        for (const building of World.buildings) {
+            const def = BUILDINGS[building.type];
+            if (!def || !def.autoFire) continue;
+            if (building.active === false) continue;
+
+            // Cooldown per building
+            building._autoFireCooldown = (building._autoFireCooldown || 0) - 1;
+            if (building._autoFireCooldown > 0) continue;
+
+            const range = def.autoFireRange || 8;
+            const damage = def.autoFireDamage || 2;
+            // Fire from building center
+            const cx = building.x + Math.floor(def.width / 2);
+            const cy = building.y + Math.floor(def.height / 2);
+
+            // Find nearest enemy (bandit or hostile animal) within range
+            let bestTarget = null;
+            let bestDist = range + 1;
+
+            for (const npc of World.npcs) {
+                if (!npc.isBandit) continue;
+                const dist = Math.abs(Math.floor(npc.x) - cx) + Math.abs(Math.floor(npc.y) - cy);
+                if (dist <= range && dist < bestDist) {
+                    bestDist = dist;
+                    bestTarget = { type: 'npc', entity: npc };
+                }
+            }
+
+            // Also check hostile animals
+            if (typeof Animal !== 'undefined') {
+                const hostiles = Animal.getLivingAnimals().filter(a => {
+                    const aDef = Animal.TYPES[a.type];
+                    return aDef && aDef.hostile;
+                });
+                for (const animal of hostiles) {
+                    const dist = Math.abs(animal.x - cx) + Math.abs(animal.y - cy);
+                    if (dist <= range && dist < bestDist) {
+                        bestDist = dist;
+                        bestTarget = { type: 'animal', entity: animal };
+                    }
+                }
+            }
+
+            if (bestTarget) {
+                building._autoFireCooldown = CONFIG.BUILDING_FIRE_COOLDOWN;
+                const heightBonus = def.isTower ? 1.5 : 1.0;
+                const fearBonus = Military.getFearDamageBonus();
+                const finalDamage = Math.max(1, Math.round(damage * heightBonus * fearBonus));
+
+                // Frontier alert: log the first sighting (cooldown-based to avoid spam)
+                if (!building._lastAlertTick || World.tick - building._lastAlertTick > 200) {
+                    building._lastAlertTick = World.tick;
+                    const targetName = bestTarget.type === 'npc' ? 'enemies' : 'hostile wildlife';
+                    EventLog.add('danger', def.name + ' engaging ' + targetName + '!', cx, cy);
+                }
+
+                if (bestTarget.type === 'npc') {
+                    NPC.damageNpc(bestTarget.entity.id, finalDamage, 'building defense');
+                    Renderer.addProjectile(cx, cy, bestTarget.entity.x, bestTarget.entity.y, '#FFDD44');
+                } else {
+                    Animal.damageAnimal(bestTarget.entity.id, finalDamage);
+                    Renderer.addProjectile(cx, cy, bestTarget.entity.x, bestTarget.entity.y, '#FFDD44');
                 }
             }
         }

@@ -13,7 +13,10 @@ const BUILDINGS = {
         width: 3, height: 3,
         cost: {},
         unique: true,
-        description: 'Center of your castle. Peasants gather here.',
+        autoFire: true,
+        autoFireRange: CONFIG.KEEP_FIRE_RANGE,
+        autoFireDamage: CONFIG.BUILDING_FIRE_DAMAGE,
+        description: 'Center of your castle. Peasants gather here. Fires at nearby enemies.',
         walkable: false,
         placementPhase: 'setup' // placed during initial setup
     },
@@ -747,6 +750,77 @@ const BUILDINGS = {
         flammable: true,
         description: 'Iron cage for displaying criminals. Maximum intimidation.',
         walkable: false
+    },
+
+    // ── Frontier (Phase 4.1) ──
+    watchtower: {
+        id: 'watchtower',
+        name: 'Watchtower',
+        category: 'frontier',
+        char: 'W',
+        fg: '#DDCC88',
+        bg: '#3a3a2a',
+        width: 2, height: 2,
+        cost: { wood: 20, stone: 15 },
+        heightLevel: 2,
+        isTower: true,
+        autoFire: true,
+        autoFireRange: CONFIG.WATCHTOWER_FIRE_RANGE,
+        autoFireDamage: CONFIG.BUILDING_FIRE_DAMAGE,
+        visionRadius: CONFIG.WATCHTOWER_VISION_RADIUS,
+        description: 'Tall frontier tower. Extends vision greatly and fires at nearby enemies automatically.',
+        walkable: false
+    },
+    guardPost: {
+        id: 'guardPost',
+        name: 'Guard Post',
+        category: 'frontier',
+        char: 'g',
+        fg: '#AA8866',
+        bg: '#2a1a0a',
+        width: 1, height: 1,
+        cost: { wood: 10, stone: 5 },
+        autoFire: true,
+        autoFireRange: CONFIG.GUARD_POST_FIRE_RANGE,
+        autoFireDamage: CONFIG.BUILDING_FIRE_DAMAGE,
+        visionRadius: CONFIG.GUARD_POST_VISION_RADIUS,
+        flammable: true,
+        description: 'Small outpost that extends vision and fires at nearby enemies automatically.',
+        walkable: false
+    },
+    forwardStockpile: {
+        id: 'forwardStockpile',
+        name: 'Forward Stockpile',
+        category: 'frontier',
+        char: 's',
+        fg: '#8B7914',
+        bg: '#221100',
+        width: 2, height: 2,
+        cost: { wood: 15, stone: 5 },
+        workers: 2,
+        stores: 'goods',
+        isForwardStorage: true,
+        forwardOf: 'stockpile',
+        flammable: true,
+        description: 'Remote storage for resources. Workers haul goods between here and the main Stockpile to keep supplies balanced.',
+        walkable: true
+    },
+    forwardGranary: {
+        id: 'forwardGranary',
+        name: 'Forward Granary',
+        category: 'frontier',
+        char: 'G',
+        fg: '#D8A735',
+        bg: '#332200',
+        width: 2, height: 2,
+        cost: { wood: 15 },
+        workers: 2,
+        stores: 'food',
+        isForwardStorage: true,
+        forwardOf: 'granary',
+        flammable: true,
+        description: 'Remote food storage. Workers haul food between here and the main Granary to keep supplies balanced.',
+        walkable: false
     }
 };
 
@@ -761,7 +835,8 @@ const BUILD_CATEGORIES = [
     { id: 'happiness', name: 'Happiness', buildings: ['chapel', 'church', 'cathedral', 'well', 'apothecary', 'inn'] },
     { id: 'goodThings', name: 'Good Things', buildings: ['gardens', 'maypole', 'statue', 'shrine'] },
     { id: 'badThings',  name: 'Bad Things',  buildings: ['gallows', 'stocks', 'dungeon', 'gibbet'] },
-    { id: 'defense',   name: 'Defense',   buildings: ['lowWall', 'highWall', 'tower', 'gatehouse', 'stairs', 'moat', 'fill', 'pitchDitch'] }
+    { id: 'defense',   name: 'Defense',   buildings: ['lowWall', 'highWall', 'tower', 'gatehouse', 'stairs', 'moat', 'fill', 'pitchDitch'] },
+    { id: 'frontier',  name: 'Frontier',  buildings: ['watchtower', 'guardPost', 'forwardStockpile', 'forwardGranary'] }
 ];
 
 // Troop definitions
