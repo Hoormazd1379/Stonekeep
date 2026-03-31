@@ -17,6 +17,8 @@
 
 `[ Stronghold Crusader x Dwarf Fortress ]`
 
+### [>>> PLAY IN BROWSER <<<](https://hoormazd1379.github.io/Stonekeep/)
+
 ---
 
 `///  HTML5 Canvas  ///  Vanilla JavaScript  ///  Zero Dependencies  ///`
@@ -27,7 +29,7 @@
 
 ## :: Overview
 
-Stonekeep is a castle-building strategy game set in a procedurally generated desert world. Inspired by **Stronghold Crusader**'s economy and **Dwarf Fortress**'s character depth, every peasant is a living individual with personality traits, memories, moods, relationships, and daily routines -- all rendered in classic ASCII.
+Stonekeep is a castle-building strategy game set in a procedurally generated desert world. Inspired by **Stronghold Crusader**'s economy and **Dwarf Fortress**'s character depth, every peasant is a living individual with personality traits, memories, moods, relationships, and daily routines, all rendered in classic ASCII.
 
 Build your keep, grow your population, manage complex production chains, and defend against bandit raids. Every character remembers what happened to them, forms friendships and rivalries, and reacts to the world around them.
 
@@ -102,6 +104,8 @@ Build your keep, grow your population, manage complex production chains, and def
 - 3 manual save slots with metadata display (day, population, timestamp)
 - Automatic auto-save every 1200 ticks
 - Full state serialization: world, NPCs, buildings, animals, events, time
+- LZW compression for efficient localStorage usage (~4% ratio on tile data)
+- Backward-compatible format with automatic migration of older saves
 - Load from main menu or continue existing games
 
 ### +++ Interface
