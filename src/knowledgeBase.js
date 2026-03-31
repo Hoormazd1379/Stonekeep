@@ -554,7 +554,7 @@ const KnowledgeBase = {
 <p><b>Service workers</b> (well, religious, apothecary, inn) work during both work and free time phases (16 hours total), only sleeping at night.</p>
 
 <h4>Free-Time Social Behavior</h4>
-<p>During free time, civilians pick activities based on current needs and personality. Low-mood social NPCs seek conversation, pious NPCs visit religious buildings, tired NPCs may rest early, and inn visits are preferred when ale is available.</p>
+<p>During free time, civilians pick activities based on current needs and personality. Low-mood social NPCs seek conversation, pious NPCs visit religious buildings, tired NPCs may rest early, and inn visits are strongly preferred (55% chance) when ale is available or the innkeeper is already carrying ale.</p>
 <p>When two free-time NPCs are within 2 tiles, they may start a short social meeting (3–6 ticks). They exchange 1–3 memories, adjust relationships (+3..+8 for pleasant chat, -5..-15 for arguments), and receive temporary mood effects.</p>
 <p>If both are socializing near an active inn and ale is available, one ale is consumed and they get bonus relationship and mood gains.</p>
 
@@ -567,7 +567,7 @@ const KnowledgeBase = {
 <p>Each NPC has a personal hunger value (0–100) that drains over time (~4 per hour). During free time, hungry NPCs (below 50) walk to the granary to eat. Each meal consumes <b>2 food units</b> and restores 50 hunger per unit, filling the hunger bar completely (2 x 50 = 100).</p>
 <p><b>Starvation override:</b> If an NPC reaches the starving threshold (10 hunger or below), they will immediately stop whatever they are doing — whether working, sleeping, or in free time — and go eat at the granary if food is available.</p>
 <p><b>Service workers</b> (well, apothecary, chapel, inn) work during both work and free time, so they eat when hungry during free time before resuming service duties.</p>
-<p>NPCs prefer food variety — they'll eat different types each day if available. Below 10 hunger, NPCs take starvation damage (1 HP/hour).</p>
+<p>NPCs prefer food variety — they'll eat different types each day if available. Below 10 hunger, NPCs take starvation damage (1 HP/hour). Death from starvation is recorded in the event log as 'died from starvation'.</p>
 
 <h4>Fatigue System</h4>
 <p>Workers accumulate fatigue during work hours. Different buildings cause different fatigue rates. Heavy labor (quarry, iron mine) tires workers faster than light work (chapel, inn).</p>
@@ -605,7 +605,7 @@ const KnowledgeBase = {
 <tr><th>Role</th><th>Building</th><th>Behavior</th></tr>
 <tr><td>Firefighter</td><td>Well</td><td>Fills bucket → walks to fire → extinguishes. Immune to fire.</td></tr>
 <tr><td>Healer</td><td>Apothecary</td><td>Walks to disease clouds → removes (6 ticks/tile).</td></tr>
-<tr><td>Priest</td><td>Chapel/Church/Cathedral</td><td>Blesses nearby peasants within radius.</td></tr>
+<tr><td>Priest</td><td>Chapel/Church/Cathedral</td><td>Blesses nearby peasants within radius. Blessed NPCs gain a memory and mood boost; witnesses gain relationship bonus.</td></tr>
 <tr><td>Innkeeper</td><td>Inn</td><td>Fetches ale from stockpile, carries to inn, waits for customers (civilians within 3 tiles), serves ale over 20 ticks. Customer gets +3 mood and a memory.</td></tr>
 <tr><td>Hunter</td><td>Hunter's Post</td><td>Tracks → shoots → butchers (12 ticks) → delivers 5 meat.</td></tr>
 </table>

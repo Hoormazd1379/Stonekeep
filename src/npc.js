@@ -569,6 +569,8 @@ const NPC = {
     // ── Hunger System ──
 
     _updateHunger(npc) {
+        // Guard against NaN hunger (can happen from save/load edge cases)
+        if (npc.hunger === undefined || npc.hunger === null || isNaN(npc.hunger)) npc.hunger = CONFIG.HUNGER_MAX;
         // Drain hunger over time
         npc._hungerAccum = (npc._hungerAccum || 0) + 1;
         if (npc._hungerAccum >= CONFIG.TICKS_PER_HOUR) {
@@ -587,6 +589,7 @@ const NPC = {
                     Animations.add(npc.x, npc.y, 'hunger', null, { npcId: npc.id });
                 }
                 if (npc.hp <= 0) {
+                    npc._lastDamageSource = 'starvation';
                     this.killNpc(npc);
                 }
             }
@@ -824,6 +827,9 @@ const NPC = {
     },
 
     _updateTroop(npc) {
+        // Guard against NaN hunger/fatigue
+        if (npc.hunger === undefined || npc.hunger === null || isNaN(npc.hunger)) npc.hunger = CONFIG.HUNGER_MAX;
+        if (npc.fatigue === undefined || npc.fatigue === null || isNaN(npc.fatigue)) npc.fatigue = 0;
         // ── Troop hunger: food teleportation (consume from granary without walking) ──
         npc._hungerAccum = (npc._hungerAccum || 0) + 1;
         if (npc._hungerAccum >= CONFIG.TICKS_PER_HOUR) {
@@ -1430,10 +1436,15 @@ const NPC = {
             if (religious && this._visitBuilding(npc, religious, 'visiting ' + BUILDINGS[religious.type].name)) return;
         }
 
-        // Inn social hub preference if ale is available
+        // Inn social hub preference if ale is available (or innkeeper already carrying ale)
         const inn = this._findNearestActiveInn(nx, ny);
-        if (inn && Resources.get('ale') > 0 && Math.random() < 0.35) {
-            if (this._visitBuilding(npc, inn, 'heading to inn')) return;
+        if (inn && Math.random() < 0.55) {
+            const aleInStorage = Resources.get('ale') > 0;
+            const innkeeperHasAle = aleInStorage || World.npcs.some(n =>
+                n.assignedBuilding === inn.id && n.carrying === 'ale');
+            if (innkeeperHasAle) {
+                if (this._visitBuilding(npc, inn, 'heading to inn')) return;
+            }
         }
 
         // Default: wander near home/keep with occasional exploration
@@ -2501,7 +2512,17 @@ const NPC = {
                 if (n.type !== 'peasant') continue;
                 const dist = Utils.manhattan(Math.floor(n.x), Math.floor(n.y), nx, ny);
                 if (dist <= 3) {
+                    const wasBlessed = n.blessedUntil && n.blessedUntil > World.tick;
                     n.blessedUntil = World.tick + 200;
+                    // Add blessing memory only when newly blessed (not re-blessed)
+                    if (!wasBlessed) {
+                        Memory.add(n, 'blessed', Memory.PRIORITY.SOCIAL,
+                            n.name + ' was blessed by ' + npc.name + '.',
+                            [npc.id], true);
+                        Memory.addToWitnesses(nx, ny, 'blessed', Memory.PRIORITY.SOCIAL,
+                            n.name + ' was blessed by ' + npc.name + '.',
+                            [n.id, npc.id], [n.id]);
+                    }
                 }
             }
 

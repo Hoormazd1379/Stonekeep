@@ -169,9 +169,13 @@ const Mood = {
         let mood = 50; // Base mood
         for (const key in this.FACTORS) {
             const result = this.FACTORS[key].evaluate(npc);
-            if (result && typeof result === 'object') mood += result.value;
+            if (result && typeof result === 'object') {
+                const val = result.value;
+                if (typeof val === 'number' && !isNaN(val)) mood += val;
+            }
         }
-        return Utils.clamp(Math.round(mood), 0, 100);
+        const final = Utils.clamp(Math.round(mood), 0, 100);
+        return isNaN(final) ? 50 : final;
     },
 
     // Return a breakdown of all mood factors for UI display
