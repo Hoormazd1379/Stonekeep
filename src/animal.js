@@ -494,7 +494,11 @@ const Animal = {
                     a._attackCooldown = (a._attackCooldown || 0) - 1;
                     if (a._attackCooldown <= 0) {
                         a._attackCooldown = def.attackCooldown || 4;
-                        const killed = NPC.damageNpc(nearestNpc.id, def.damage || 3);
+                        if (!a._lastAttackLogTick || World.tick - a._lastAttackLogTick >= Math.floor(CONFIG.TICKS_PER_HOUR / 2)) {
+                            EventLog.add('warning', 'Lion attacked ' + nearestNpc.name + '.', a.x, a.y);
+                            a._lastAttackLogTick = World.tick;
+                        }
+                        const killed = NPC.damageNpc(nearestNpc.id, def.damage || 3, 'wild animal attack');
                         // NPC fights back
                         if (!killed && nearestNpc.damage) {
                             this.damageAnimal(a.id, nearestNpc.damage);
@@ -543,6 +547,7 @@ const Animal = {
                 if (dist <= tameRange) {
                     a.isTamed = true;
                     a.fg = def.tamedFg || def.fg;
+                    EventLog.add('positive', 'A ' + (def.name || a.type) + ' has been tamed.', a.x, a.y);
                     break;
                 }
             }
@@ -554,6 +559,7 @@ const Animal = {
                 if (dist <= tameRange) {
                     a.isTamed = true;
                     a.fg = def.tamedFg || def.fg;
+                    EventLog.add('positive', 'A ' + (def.name || a.type) + ' has been tamed.', a.x, a.y);
                     break;
                 }
             }
@@ -567,7 +573,8 @@ const Animal = {
 
         if (anyTamed && World.buildings.length > 0) {
             // Tamed herds: pick a target building/NPC to hang around
-            if (!herd._tamedTarget || Math.random() < 0.02) {
+            // Re-pick targets more frequently for active pathfinding
+            if (!herd._tamedTarget || Math.random() < 0.05) {
                 // Pick a random player building as the hang-out target
                 if (Math.random() < 0.7 || World.npcs.length === 0) {
                     const b = World.buildings[Math.floor(Math.random() * World.buildings.length)];
@@ -582,15 +589,17 @@ const Animal = {
                 }
             }
 
-            // Move herd center toward target
+            // Move herd center toward target — faster movement for tamed pets
             if (herd._tamedTarget) {
                 const tdx = herd._tamedTarget.x - herd.centerX;
                 const tdy = herd._tamedTarget.y - herd.centerY;
                 const tdist = Math.abs(tdx) + Math.abs(tdy);
                 if (tdist > 4) {
-                    // Move toward target faster
-                    herd.centerX += Math.sign(tdx);
-                    herd.centerY += Math.sign(tdy);
+                    // Move 2 tiles per tick when far away for faster pathfinding
+                    const stepX = Math.sign(tdx) * Math.min(2, Math.abs(tdx));
+                    const stepY = Math.sign(tdy) * Math.min(2, Math.abs(tdy));
+                    herd.centerX += stepX;
+                    herd.centerY += stepY;
                 } else if (Math.random() < 0.3) {
                     // Small random drift when near target
                     herd.centerX += Math.floor(Math.random() * 3) - 1;
@@ -628,13 +637,26 @@ const Animal = {
 
             if (Math.random() > def.moveChance * (a.isTamed ? 1.5 : 1)) continue;
 
+            // Tamed animals: actively move toward herd center when far
+            const distFromCenter = Math.abs(a.x - herd.centerX) + Math.abs(a.y - herd.centerY);
+            if (a.isTamed && distFromCenter > def.wanderRadius * 0.5) {
+                // Pathfind directly toward center
+                let nx = a.x + Math.sign(herd.centerX - a.x);
+                let ny = a.y + Math.sign(herd.centerY - a.y);
+                if (this._isValidAnimalTile(nx, ny)) {
+                    a.x = nx;
+                    a.y = ny;
+                }
+                continue;
+            }
+
             const dx = Math.floor(Math.random() * 3) - 1;
             const dy = Math.floor(Math.random() * 3) - 1;
             let nx = a.x + dx;
             let ny = a.y + dy;
 
-            const distFromCenter = Math.abs(nx - herd.centerX) + Math.abs(ny - herd.centerY);
-            if (distFromCenter > def.wanderRadius) {
+            const newDistFromCenter = Math.abs(nx - herd.centerX) + Math.abs(ny - herd.centerY);
+            if (newDistFromCenter > def.wanderRadius) {
                 nx = a.x + Math.sign(herd.centerX - a.x);
                 ny = a.y + Math.sign(herd.centerY - a.y);
             }
@@ -722,7 +744,7 @@ const Animal = {
         if (bestDist <= 1 && a._attackCooldown <= 0) {
             a._attackCooldown = def.attackCooldown || 4;
             if (targetType === 'npc') {
-                NPC.damageNpc(target.id, def.damage || 2);
+                NPC.damageNpc(target.id, def.damage || 2, 'pet attack');
             } else {
                 this.damageAnimal(target.id, def.damage || 2);
             }
@@ -846,11 +868,12 @@ const Animal = {
     },
 
     // Find nearest living animal of a type (or any huntable type) from position
-    findNearestAnimal(type, fromX, fromY) {
+    findNearestAnimal(type, fromX, fromY, filterFn) {
         let best = null;
         let bestDist = Infinity;
         for (const a of this._animals) {
             if (a.dead) continue;
+            if (filterFn && !filterFn(a)) continue;
             // If type is 'any_passive', match any passive animal
             if (type === 'any_passive') {
                 const def = this.TYPES[a.type];

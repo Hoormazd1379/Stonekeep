@@ -26,8 +26,8 @@ const KnowledgeBase = {
 <tr><td>Place building</td><td>Left-click (after selecting from menu)</td></tr>
 <tr><td>Cancel placement</td><td>Right-click / Escape</td></tr>
 <tr><td>Select tile/unit</td><td>Left-click on map</td></tr>
-<tr><td>Speed controls</td><td>1-5 keys / ribbon buttons</td></tr>
-<tr><td>Pause</td><td>Space / ⏸ button</td></tr>
+<tr><td>Speed controls</td><td>1-4 keys / ribbon buttons</td></tr>
+<tr><td>Pause</td><td>1 key / || button</td></tr>
 </table>
 <p class="kb-tip">Tip: The TPS display (top bar) shows actual game ticks per second. Higher speed settings increase TPS — at max speed, the game runs 16× faster!</p>
 
@@ -110,9 +110,12 @@ const KnowledgeBase = {
 
 <h4>Housing</h4>
 <table>
-<tr><th>Building</th><th>Cost</th><th>Effect</th></tr>
-<tr><td>Hovel</td><td>6 wood</td><td>Houses 8 peasants. Flammable.</td></tr>
+<tr><th>Building</th><th>Cost</th><th>Capacity</th><th>Tier</th></tr>
+<tr><td>Hovel</td><td>6 wood</td><td>8 peasants</td><td>Basic (Tier 1)</td></tr>
+<tr><td>Cottage</td><td>12 wood, 5 stone</td><td>6 peasants</td><td>Comfortable (Tier 2)</td></tr>
+<tr><td>House</td><td>20 wood, 10 stone, 5 iron</td><td>4 peasants</td><td>Quality (Tier 3)</td></tr>
 </table>
+<p>Higher tier housing provides better fatigue recovery during sleep. NPCs are automatically assigned to the best available housing. Homeless NPCs suffer a mood penalty and slower recovery.</p>
 
 <h4>Resource Gathering</h4>
 <table>
@@ -170,6 +173,7 @@ const KnowledgeBase = {
 <tr><td>Bazaar</td><td>10 wood, 50g</td><td>Buy/sell resources. Dynamic pricing. Unique.</td></tr>
 </table>
 <p><b>Bazaar Pricing:</b> Prices adjust based on your current stock. Low stock = cheap prices (×0.6), high stock = expensive (×1.5). Buying drives prices up, selling drives them down. Trades 5 units per transaction.</p>
+<p><b>Auto-Trade:</b> Set a minimum and maximum amount for any resource. If your stock drops below the minimum, the bazaar automatically buys 5 units per hour until the minimum is reached (or you run out of gold). If stock exceeds the maximum, surplus is sold 5 units per hour until it falls back to the maximum.</p>
 
 <h4>Defenses</h4>
 <table>
@@ -240,23 +244,33 @@ const KnowledgeBase = {
             content() {
                 return `
 <h3>Popularity &amp; Happiness</h3>
-<p>Base happiness: <b>50</b>. When happiness ≥ 50, new peasants arrive. Below 25, idle peasants leave.</p>
+<p>Castle happiness is the <b>arithmetic average</b> of all individual NPC happiness values. When castle happiness ≥ 50, new peasants arrive. Below 25, idle peasants leave.</p>
 
-<h4>Happiness Factors</h4>
+<h4>Individual NPC Happiness</h4>
+<p>Each peasant NPC has their own happiness score (0-100), computed from:</p>
+<ul>
+<li><b>Mood</b> (60% weight) — their personal emotional state from hunger, fatigue, health, housing, taxes, personality, and combat</li>
+<li><b>Global factors</b> (40% weight) — food supply, food variety, ale coverage, fear, disease</li>
+<li><b>Personal modifiers</b> — housing tier bonus, tax sensitivity (personality trait), religion blessing, hunger/health state</li>
+</ul>
+<p>View any NPC's happiness, mood, and personality traits via the NPC Details modal (click their name in a building or tile info panel).</p>
+
+<h4>Global Happiness Factors</h4>
 <table>
 <tr><th>Factor</th><th>Range</th><th>How</th></tr>
 <tr><td>Food Supply</td><td>−8 to +8</td><td>Based on food stock vs population. Ration level adjusts (+4 extra, +8 double, −4 half).</td></tr>
 <tr><td>Food Variety</td><td>0 to +3</td><td>+1 per food type above 1 (apples, bread, cheese, meat).</td></tr>
 <tr><td>Tax</td><td>−20 to +20</td><td>Each tax level costs 4 happiness. Bribe (negative tax) gives happiness.</td></tr>
 <tr><td>Religion</td><td>0 to ~13+</td><td>Priest blessing coverage + first-church/cathedral bonuses + wells.</td></tr>
-<tr><td>Housing</td><td>−6 to +2</td><td>100%+ occupancy: −6. 80%+: −2. Under 80%: +2.</td></tr>
+<tr><td>Housing</td><td>−10 to +4</td><td>Based on housing quality tiers and homelessness. Higher tier = more bonus.</td></tr>
 <tr><td>Ale</td><td>0 to +8</td><td>Inn coverage (1 inn per 25 pop). Full = +8.</td></tr>
 <tr><td>Fear Factor</td><td>−20 to +20</td><td>Good things vs bad things. ±4 happiness per degree.</td></tr>
 <tr><td>Disease</td><td>−8 to 0</td><td>Penalty based on % of population infected.</td></tr>
+<tr><td>Hunger</td><td>−8 to +3</td><td>Based on how well-fed the population is. Starving NPCs cause severe penalty.</td></tr>
 </table>
 
 <h4>Tax System</h4>
-<p>Tax rate: −5 to +5. Positive tax collects <b>rate × population</b> gold every 30 ticks. Negative tax (bribe) costs gold but boosts happiness.</p>
+<p>Tax rate: −5 to +5. Positive tax collects <b>rate × population</b> gold once per work shift start. Negative tax (bribe) costs gold but boosts happiness.</p>
 
 <h4>Fear Factor</h4>
 <p>Range: −5 to +5.</p>
@@ -326,7 +340,7 @@ const KnowledgeBase = {
 <h3>Events &amp; Hazards</h3>
 
 <h4>Random Events</h4>
-<p>Events begin after a grace period (~2400 ticks) and occur every ~4000 ticks (faster with larger population).</p>
+<p>Negative events are blocked for the first <b>3 full day/night cycles</b>, giving you time to establish your settlement. After that safety window, events begin on the normal schedule (~4000 ticks between rolls, faster with larger population).</p>
 
 <h4>-- Fire Outbreak</h4>
 <p>Randomly ignites a flammable building. Build <b>Wells</b> — their workers act as firefighters.</p>
@@ -334,7 +348,7 @@ const KnowledgeBase = {
 <tr><th>Property</th><th>Value</th></tr>
 <tr><td>Spread chance</td><td>50% every 8 ticks to adjacent tiles</td></tr>
 <tr><td>Burn duration</td><td>240 ticks (normal), 600 ticks (pitch ditch)</td></tr>
-<tr><td>Building damage</td><td>Every 10 ticks. 8 fire HP before destruction.</td></tr>
+<tr><td>Building damage</td><td>Every 35 ticks. 8 fire HP before destruction.</td></tr>
 <tr><td>NPC ignition</td><td>25% per tick on fire tiles</td></tr>
 <tr><td>NPC burn damage</td><td>1 damage every 8 ticks</td></tr>
 <tr><td>Self-extinguish</td><td>After 50 ticks off fire tiles</td></tr>
@@ -363,6 +377,25 @@ const KnowledgeBase = {
 </table>
 <p class="kb-tip">Tip: Apothecary healers clear disease clouds. Tamed cats also help — they heal diseased NPCs and clear clouds!</p>
 
+<h4>Event Log Panel</h4>
+<p>The <b>Event Log</b> appears on the right sidebar below the minimap, clock, and speed controls ribbon. It records major events as they happen using this format:</p>
+<p><code>[Day X, HH:MM] Description [Goto]</code></p>
+<ul>
+<li><b>Goto:</b> Centers the camera on the event location.</li>
+<li><b>Filters:</b> All, Danger, Warning, Caution, Positive, Info.</li>
+<li><b>Capacity:</b> Keeps up to 400 entries (oldest entries are removed first).</li>
+</ul>
+
+<table>
+<tr><th>Category</th><th>Color</th><th>Examples</th></tr>
+<tr><td>Danger</td><td style="color:#FF4444">#FF4444</td><td>Deaths, building destruction, bandit raids</td></tr>
+<tr><td>Warning</td><td style="color:#FF8800">#FF8800</td><td>Fires, disease outbreaks, NPC fights, desertion</td></tr>
+<tr><td>Caution</td><td style="color:#DDDD44">#DDDD44</td><td>Theft, rivalry milestones, low-happiness departures</td></tr>
+<tr><td>Positive</td><td style="color:#44DD44">#44DD44</td><td>Arrivals, construction completed, friendships, pet taming</td></tr>
+<tr><td>Info</td><td style="color:#44DDDD">#44DDDD</td><td>Troop recruitment, worker assignment, bazaar trades</td></tr>
+<tr><td>Neutral</td><td style="color:#CCCCCC">#CCCCCC</td><td>General informational events</td></tr>
+</table>
+
 <h4>Happiness Impact of Disease</h4>
 <table>
 <tr><th>% Infected</th><th>Happiness Penalty</th></tr>
@@ -380,7 +413,7 @@ const KnowledgeBase = {
             content() {
                 return `
 <h3>Time &amp; Day/Night Cycle</h3>
-<p>Stonekeep has a full 24-hour day/night cycle. One in-game day takes approximately <b>14 minutes</b> at normal speed (1680 game ticks). The game starts at <b>8:00 AM</b> on Day 1.</p>
+<p>Stonekeep has a full 24-hour day/night cycle. One in-game day takes approximately <b>25.6 minutes</b> at normal speed (3072 game ticks). The game starts at <b>8:00 AM</b> on Day 1.</p>
 
 <h4>Day Phases</h4>
 <table>
@@ -426,8 +459,9 @@ const KnowledgeBase = {
 </table>
 
 <h4>Roads</h4>
-<p>NPCs create roads naturally as they walk. Higher traffic = higher road level (max 15). Roads provide:</p>
+<p>Civilian NPCs create roads naturally as they walk. Bandits and troops do not create roads. Higher traffic = higher road level (max 15). Roads provide:</p>
 <ul>
+<li>+2% movement speed per road level (max +30% at level 15)</li>
 <li>Extended Fog of War visibility along traveled paths</li>
 <li>Visual indication of frequently used routes</li>
 </ul>
@@ -436,6 +470,62 @@ const KnowledgeBase = {
 <h4>Fertile Land</h4>
 <p>Farms (Apple Orchard, Wheat Farm, Dairy Farm, Hops Farm) require <b>fertile terrain</b>: Grassland or Oasis tiles. These are found near oases throughout the map.</p>
 <p class="kb-tip">Tip: Explore outward from your keep to find oases with fertile land for farming!</p>`;
+            }
+        },
+
+        npcsPersonality: {
+            title: 'Personality & Mood',
+            content() {
+                return `
+<h3>Personality &amp; Mood System</h3>
+
+<h4>Personality Traits</h4>
+<p>Each NPC spawns with 2-3 personality traits that affect their behavior and mood. Traits are permanent and determined by the NPC's identity. Opposing traits (e.g. Brave/Cowardly) cannot appear together.</p>
+<table>
+<tr><th>Trait</th><th>Effect</th></tr>
+<tr><td>Brave</td><td>60% less likely to flee bandits, more willing to fight</td></tr>
+<tr><td>Cowardly</td><td>40% more likely to flee, avoids conflict</td></tr>
+<tr><td>Greedy</td><td>More sensitive to taxes, higher theft chance in future</td></tr>
+<tr><td>Generous</td><td>Tolerates taxes better, builds relationships faster</td></tr>
+<tr><td>Social</td><td>Mood bonus from being around others</td></tr>
+<tr><td>Loner</td><td>Slight mood penalty from social situations</td></tr>
+<tr><td>Hardworking</td><td>20% faster work speed, but tires 15% faster</td></tr>
+<tr><td>Lazy</td><td>20% slower work speed, but tires 15% slower</td></tr>
+<tr><td>Aggressive</td><td>More willing to fight, higher conflict chance</td></tr>
+<tr><td>Peaceful</td><td>Avoids conflict, mood bonus during peacetime</td></tr>
+<tr><td>Pious</td><td>50% more benefit from religion</td></tr>
+<tr><td>Skeptical</td><td>50% less affected by religion</td></tr>
+</table>
+<p>View an NPC's traits in their Details modal.</p>
+
+<h4>Mood System</h4>
+<p>Each NPC has a personal mood value (0-100) computed from their current conditions:</p>
+<ul>
+<li><b>Hunger:</b> Starving = −20, Hungry = −8, Well-fed = +5</li>
+<li><b>Fatigue:</b> Exhausted = −15, Very tired = −8, Rested = +3</li>
+<li><b>Health:</b> Low HP = −12, Moderate HP = −5</li>
+<li><b>Housing:</b> Homeless = −10, Higher tier homes = bonus</li>
+<li><b>Tax:</b> Personal tax burden (modified by personality)</li>
+<li><b>Religion:</b> Blessed by priest = +4 (Pious NPCs get more)</li>
+<li><b>Disease/Fire:</b> Being diseased or on fire = severe penalty</li>
+<li><b>Fear/Ale:</b> Castle-level factors contribute partially</li>
+<li><b>Memories:</b> Accumulated memory weight affects mood (positive and negative)</li>
+<li><b>Relationships:</b> Average relationship quality gives up to +/-5</li>
+<li><b>Social:</b> Recent pleasant chats or arguments temporarily modify mood</li>
+<li><b>Conflict &amp; Crime:</b> Fights, theft, and witnessing desertion add negative memories that can drag mood down further</li>
+</ul>
+
+<h4>Mood Thresholds</h4>
+<table>
+<tr><th>Mood</th><th>Range</th><th>Effect</th></tr>
+<tr><td style="color:#44ff44">Joyful</td><td>80-100</td><td>+15% work speed</td></tr>
+<tr><td style="color:#88cc44">Content</td><td>60-79</td><td>+5% work speed</td></tr>
+<tr><td style="color:#cccc44">Neutral</td><td>40-59</td><td>Normal speed</td></tr>
+<tr><td style="color:#cc8844">Unhappy</td><td>20-39</td><td>−10% work speed</td></tr>
+<tr><td style="color:#cc4444">Angry</td><td>10-19</td><td>−25% work speed</td></tr>
+<tr><td style="color:#ff2222">Desperate</td><td>0-9</td><td>−25% work speed</td></tr>
+</table>
+<p class="kb-tip">Tip: Keep your NPCs well-fed, well-housed, and well-rested for maximum productivity. A Joyful NPC works 15% faster than normal!</p>`;
             }
         },
 
@@ -453,6 +543,44 @@ const KnowledgeBase = {
 <tr><td>Troops</td><td>Varies</td><td>Varies</td><td>See Military section.</td></tr>
 </table>
 
+<h4>Daily Schedule</h4>
+<p>All peasants follow a daily schedule based on the in-game clock:</p>
+<table>
+<tr><th>Phase</th><th>Hours</th><th>Activity</th></tr>
+<tr><td>Work</td><td>6:00–15:00</td><td>Workers perform their building's task cycle</td></tr>
+<tr><td>Free Time</td><td>15:00–22:00</td><td>NPCs eat, socialize, visit inn/religious sites, wander</td></tr>
+<tr><td>Sleep</td><td>22:00–6:00</td><td>NPCs go home to sleep, recovering fatigue and health</td></tr>
+</table>
+<p><b>Service workers</b> (well, religious, apothecary, inn) work during both work and free time phases (16 hours total), only sleeping at night.</p>
+
+<h4>Free-Time Social Behavior</h4>
+<p>During free time, civilians pick activities based on current needs and personality. Low-mood social NPCs seek conversation, pious NPCs visit religious buildings, tired NPCs may rest early, and inn visits are preferred when ale is available.</p>
+<p>When two free-time NPCs are within 2 tiles, they may start a short social meeting (3–6 ticks). They exchange 1–3 memories, adjust relationships (+3..+8 for pleasant chat, -5..-15 for arguments), and receive temporary mood effects.</p>
+<p>If both are socializing near an active inn and ale is available, one ale is consumed and they get bonus relationship and mood gains.</p>
+
+<h4>Conflict, Theft, and Desertion</h4>
+<p>Very unhappy civilians are no longer always passive. Angry or Desperate NPCs with bad relationships may start fistfights with nearby rivals. Aggressive personalities are more likely to escalate; Peaceful personalities are less likely to do so and may feel guilty after winning.</p>
+<p>Desperate NPCs with the Greedy trait may also steal from the granary or stockpile, taking 1–3 units. If they steal food they eat it immediately; otherwise the theft only improves their own outlook while harming community trust if witnessed.</p>
+<p>NPCs who remain <b>Desperate</b> for roughly 3 in-game days may desert the settlement entirely, abandoning their work and walking toward the wilderness. Nearby witnesses remember the departure.</p>
+
+<h4>Hunger System</h4>
+<p>Each NPC has a personal hunger value (0–100) that drains over time (~4 per hour). During free time, hungry NPCs (below 50) walk to the granary to eat. Each meal consumes <b>2 food units</b> and restores 50 hunger per unit, filling the hunger bar completely (2 x 50 = 100).</p>
+<p><b>Starvation override:</b> If an NPC reaches the starving threshold (10 hunger or below), they will immediately stop whatever they are doing — whether working, sleeping, or in free time — and go eat at the granary if food is available.</p>
+<p><b>Service workers</b> (well, apothecary, chapel, inn) work during both work and free time, so they eat when hungry during free time before resuming service duties.</p>
+<p>NPCs prefer food variety — they'll eat different types each day if available. Below 10 hunger, NPCs take starvation damage (1 HP/hour).</p>
+
+<h4>Fatigue System</h4>
+<p>Workers accumulate fatigue during work hours. Different buildings cause different fatigue rates. Heavy labor (quarry, iron mine) tires workers faster than light work (chapel, inn).</p>
+<ul>
+<li><b>High fatigue (80+):</b> Production speed reduced by 50%</li>
+<li><b>Exhaustion (100):</b> Worker stops working and must rest</li>
+<li><b>Sleep recovery:</b> ~15 fatigue per hour of sleep, with bonuses from better housing</li>
+</ul>
+<p>Housing tier affects recovery: Hovel = 1.0×, Cottage = 1.25×, House = 1.5×. Homeless NPCs recover at only 0.5× rate.</p>
+
+<h4>Health Regeneration</h4>
+<p>During sleep, NPCs regenerate 1 HP per hour — but only if they are not starving and not diseased. Low health (below 30%) also reduces production speed by 50%.</p>
+
 <h4>Worker Behavior</h4>
 <p>Idle peasants auto-assign to understaffed buildings every 10 ticks. Workers perform their building's task cycle:</p>
 <ol>
@@ -464,13 +592,21 @@ const KnowledgeBase = {
 </ol>
 <p>Workers flee from bandits within 6 tiles (civilians don't fight).</p>
 
+<h4>Troop Needs</h4>
+<p>Troops also have hunger and fatigue, but handle them differently:</p>
+<ul>
+<li><b>Food:</b> Troops "teleport" food — they consume 2 units from the granary without walking there</li>
+<li><b>Sleep:</b> Fatigued troops sleep at their post during the night phase (if no enemies nearby)</li>
+<li><b>Wake:</b> Sleeping troops wake instantly when enemies appear, when selected, or when given orders</li>
+</ul>
+
 <h4>Special Worker Roles</h4>
 <table>
 <tr><th>Role</th><th>Building</th><th>Behavior</th></tr>
 <tr><td>Firefighter</td><td>Well</td><td>Fills bucket → walks to fire → extinguishes. Immune to fire.</td></tr>
 <tr><td>Healer</td><td>Apothecary</td><td>Walks to disease clouds → removes (6 ticks/tile).</td></tr>
 <tr><td>Priest</td><td>Chapel/Church/Cathedral</td><td>Blesses nearby peasants within radius.</td></tr>
-<tr><td>Innkeeper</td><td>Inn</td><td>Serves ale to population.</td></tr>
+<tr><td>Innkeeper</td><td>Inn</td><td>Fetches ale from stockpile, carries to inn, waits for customers (civilians within 3 tiles), serves ale over 20 ticks. Customer gets +3 mood and a memory.</td></tr>
 <tr><td>Hunter</td><td>Hunter's Post</td><td>Tracks → shoots → butchers (12 ticks) → delivers 5 meat.</td></tr>
 </table>
 
@@ -479,7 +615,170 @@ const KnowledgeBase = {
 <p>Starting: 8 peasants + resources (500 gold, 50 wood, 30 stone, 10 apples, 10 meat).</p>
 
 <h4>NPC Details</h4>
-<p>Click any NPC and use the <b>Details</b> button in the info panel to see their full status, including name, role, health, and current activity. The game pauses while viewing details.</p>`;
+<p>Click any villager and use the <b>Details</b> button in the info panel to see their full status, including name, role, health, hunger, fatigue, <b>personality traits</b>, <b>mood</b>, home, and current activity. Use the <b>View</b> buttons next to their workplace or home to jump the camera to that building. The game pauses while viewing details.</p>
+<p>From the details panel you can also open <b>Mood</b> (factor breakdown), <b>Memories</b> (event log), and <b>Relations</b> (relationship list) sub-modals. Troops do not have Mood or Relations buttons.</p>
+<p>The <b>Villagers</b> button in the top HUD opens a sortable list of all villagers with key stats, occupation, and quick Info/Focus actions.</p>
+<p>When a villager dies, the death message includes their occupation and cause of death (e.g. "John (Quarry worker) died from bandit attack.").</p>
+<p>Housing building info panels also list all residents with Focus/Details buttons, similar to how workplaces show their workers.</p>`;
+            }
+        },
+        memory: {
+            title: 'NPC Memory',
+            content() {
+                return `
+<h3>NPC Memory System</h3>
+<p>Each NPC maintains a personal memory log of events they have witnessed or experienced. Memories affect mood and create a living history for each character.</p>
+
+<h4>How Memories Work</h4>
+<p>When something notable happens — a fire, a raid, a death, disease, or even arriving at the settlement — NPCs within <b>8 tiles</b> of the event automatically gain a <b>firsthand memory</b> of it.</p>
+<p>Each memory has a <b>priority</b> from 1 (Routine) to 10 (Death). Higher-priority memories last longer and have more impact on mood.</p>
+
+<h4>Memory Aging</h4>
+<p>Memories fade over time. A memory from today has full impact; after 3 days it retains about 50%, and after a week only about 15%. This is the <b>recency factor</b>.</p>
+<p>The <b>effective priority</b> of a memory is its base priority multiplied by its recency factor. When the memory log exceeds 100 entries, the lowest effective-priority memory is removed.</p>
+
+<h4>Firsthand vs. Secondhand</h4>
+<p><b>Firsthand</b> memories are events the NPC witnessed directly. <b>Secondhand</b> memories are heard from others. Secondhand memories have reduced priority and less mood impact (40% of firsthand).</p>
+
+<h4>Mood Impact</h4>
+<p>Memories directly influence NPC mood. Negative events (death, fire, disease, exhaustion, theft, fights, desertion) lower mood, while positive events (recovery, being blessed, satisfying victories) raise it. The impact is weighted by recency and whether the memory is firsthand.</p>
+
+<h4>Memory Types</h4>
+<table>
+<tr><th>Type</th><th>Priority</th><th>Mood Effect</th></tr>
+<tr><td>\u2605 Arrived</td><td>Routine (1)</td><td>Slight positive</td></tr>
+<tr><td>\u2692 Assigned Work</td><td>Routine (1)</td><td>Slight positive</td></tr>
+<tr><td>\u2764 Recovered</td><td>Notable (4)</td><td>Positive</td></tr>
+<tr><td>\u2721 Blessed</td><td>Notable (4)</td><td>Positive</td></tr>
+<tr><td>\u231B Exhaustion</td><td>Notable (4)</td><td>Negative</td></tr>
+<tr><td>\u26A0 Got Sick</td><td>Disease (6)</td><td>Negative</td></tr>
+<tr><td>\u26A0 Theft / Caught Stealing</td><td>Crime (7)</td><td>Usually negative</td></tr>
+<tr><td>\u21E8 Fled Danger</td><td>Combat (8)</td><td>Negative</td></tr>
+<tr><td>\u2694 NPC Fight</td><td>Combat (8)</td><td>Negative or mixed</td></tr>
+<tr><td>\u2694 Bandit Raid / Kill</td><td>Combat (8)</td><td>Mixed</td></tr>
+<tr><td>\u2737 Fire</td><td>Fire (9)</td><td>Strong negative</td></tr>
+<tr><td>\u2620 NPC Died</td><td>Death (10)</td><td>Strong negative</td></tr>
+<tr><td>\u21E8 Saw Desertion</td><td>Upheaval (6)</td><td>Negative</td></tr>
+</table>
+
+<h4>Viewing Memories</h4>
+<p>Open an NPC's details panel and click the <b>Memories</b> button to see their full memory log. Each entry shows an icon, description, day number, whether it's firsthand or secondhand, and its current effective priority.</p>`;
+            }
+        },
+        relationships: {
+            title: 'Relationships',
+            content() {
+                return `
+<h3>NPC Relationships</h3>
+<p>Each NPC tracks how they feel about other NPCs they have interacted with or heard about. Relationship values range from <b>-100</b> (bitter enemy) to <b>+100</b> (closest friend), starting at 0 (stranger).</p>
+
+<h4>Relationship Tiers</h4>
+<table>
+<tr><th>Tier</th><th>Range</th><th>Effect</th></tr>
+<tr><td style="color:#cc4444">Enemy</td><td>-100 to -50</td><td>NPC actively avoids or conflicts with target</td></tr>
+<tr><td style="color:#cc8844">Rival</td><td>-49 to -10</td><td>Tense interactions, arguments more likely</td></tr>
+<tr><td style="color:#888">Stranger</td><td>-9 to +9</td><td>Polite but indifferent</td></tr>
+<tr><td style="color:#cccc44">Acquaintance</td><td>+10 to +49</td><td>Friendly, willing to share memories</td></tr>
+<tr><td style="color:#88cc44">Friend</td><td>+50 to +79</td><td>Seeks out for social time, mood bonus</td></tr>
+<tr><td style="color:#44ff44">Close Friend</td><td>+80 to +100</td><td>Strong mood bonus, will defend in fights</td></tr>
+</table>
+
+<h4>How Relationships Change</h4>
+<ul>
+<li><b>Shared work:</b> NPCs at the same building gain +1 relationship per day. Social NPCs gain +1.5.</li>
+<li><b>Social meetings:</b> Pleasant chats improve relationships (+3..+8), arguments worsen them (-5..-15).</li>
+<li><b>Witnessing events:</b> Seeing positive events (recovery, blessing) involving someone improves opinion. Seeing negative events (death, fire, raids, fights, theft) worsens it.</li>
+<li><b>Secondhand memories:</b> Hearing good or bad things about someone changes opinion at 40% of the direct magnitude.</li>
+<li><b>Personality:</b> Social NPCs build positive relationships faster. Aggressive NPCs build negative ones faster.</li>
+<li><b>Inn bonus:</b> Socializing near an active inn with available ale increases social gains.</li>
+<li><b>Repeated fights:</b> Civilians who keep fighting the same rival can rapidly become full enemies.</li>
+</ul>
+
+<h4>Mood Impact</h4>
+<p>The average quality of an NPC's relationships contributes to their mood: surrounded by friends = up to +5 mood bonus; surrounded by enemies = up to -5 mood penalty.</p>
+
+<h4>Viewing Relationships</h4>
+<p>Open an NPC's details panel and click the <b>Relations</b> button to see their relationship list. Each entry shows the other NPC's name, tier, value, and provides Info and Focus buttons.</p>`;
+            }
+        },
+        animations: {
+            title: 'Animations',
+            content() {
+                return `
+<h3>Overlay Animation System</h3>
+<p>Visual overlays appear above NPCs and buildings to show what is happening in the settlement at a glance. Animations are data-driven — each type has its own character, color, and behavior.</p>
+
+<h4>State Overlays (Persistent)</h4>
+<p>These appear automatically when an NPC enters a state and disappear when the state ends:</p>
+<table>
+<tr><th>Overlay</th><th>Symbol</th><th>Color</th><th>Trigger</th></tr>
+<tr><td>Sleep</td><td>z / Z</td><td style="color:#8888FF">#8888FF</td><td>NPC is sleeping (at home or at post)</td></tr>
+<tr><td>Speech</td><td>o / O</td><td style="color:#66ccff">#66ccff</td><td>NPC is socializing</td></tr>
+<tr><td>Combat</td><td>x / +</td><td style="color:#FF4444">#FF4444</td><td>Troop/bandit attack cooldown active</td></tr>
+<tr><td>Anger</td><td># / *</td><td style="color:#ff4444">#ff4444</td><td>Civilian is in a fight</td></tr>
+<tr><td>Carry</td><td>^</td><td style="color:#88aa44">#88aa44</td><td>NPC is carrying a resource</td></tr>
+</table>
+
+<h4>Triggered Overlays (Timed)</h4>
+<p>These appear briefly when an event occurs and fade out automatically:</p>
+<table>
+<tr><th>Overlay</th><th>Symbol</th><th>Color</th><th>Trigger</th></tr>
+<tr><td>Production Sparkle</td><td>+ / *</td><td style="color:#ffdd44">#ffdd44</td><td>Item produced at a building</td></tr>
+<tr><td>Heart</td><td>&lt;3</td><td style="color:#ff6688">#ff6688</td><td>Friendship formed</td></tr>
+<tr><td>Music</td><td>~ / *</td><td style="color:#cc88ff">#cc88ff</td><td>Priest blessing NPCs</td></tr>
+<tr><td>Skull</td><td>d / b</td><td style="color:#cccccc">#cccccc</td><td>NPC death</td></tr>
+<tr><td>Hunger</td><td>o</td><td style="color:#cc8844">#cc8844</td><td>NPC taking starvation damage</td></tr>
+<tr><td>Sweat</td><td>, / .</td><td style="color:#88ccff">#88ccff</td><td>NPC stealing resources</td></tr>
+<tr><td>Exclaim</td><td>!</td><td style="color:#ffcc00">#ffcc00</td><td>NPC deserting the settlement</td></tr>
+<tr><td>Disease</td><td>~ / *</td><td style="color:#88CC00">#88CC00</td><td>NPC contracts a disease</td></tr>
+<tr><td>Tool</td><td>/ \\ /</td><td style="color:#aaaaaa">#aaaaaa</td><td>Worker using tools at workplace or gathering</td></tr>
+<tr><td>Flash</td><td>* / +</td><td style="color:#ffffff">#ffffff</td><td>Major event start (fire, raid, disease outbreak)</td></tr>
+<tr><td>Ember</td><td>. / ,</td><td style="color:#FF6600">#FF6600</td><td>Fire spreading to adjacent tiles</td></tr>
+<tr><td>Miasma</td><td>~ / .</td><td style="color:#88CC00">#88CC00</td><td>Disease cloud appearing on a tile</td></tr>
+</table>
+
+<h4>Visual Effects</h4>
+<ul>
+<li><b>Float:</b> Some overlays drift upward over time (sleep, heart, sparkle, skull, sweat, music, exclaim).</li>
+<li><b>Fade:</b> Timed overlays gradually become transparent in their final 40% of duration.</li>
+<li><b>Fog of War:</b> Overlays only appear on currently visible tiles.</li>
+<li><b>NPC Following:</b> NPC-attached overlays move with their NPC in real time.</li>
+<li><b>Camera Shake:</b> The camera shakes when buildings are destroyed by fire and during large bandit raids (5+ attackers).</li>
+</ul>
+
+<h4>Extensibility</h4>
+<p>Adding a new animation type requires only a single data entry in the animation registry — no code changes needed.</p>`;
+            }
+        },
+
+        saveLoad: {
+            title: 'Save & Load',
+            content() {
+                return `
+<h3>Save &amp; Load System</h3>
+
+<h4>Save Slots</h4>
+<p>The game provides <b>3 manual save slots</b> plus <b>1 automatic save slot</b>. Each slot stores the complete state of the game including all buildings, NPCs, resources, events, and world state.</p>
+
+<h4>Manual Save</h4>
+<p>Click the <b>Save</b> button in the top HUD bar (next to Villagers and Knowledge Base buttons). A dialog appears with 3 slots to choose from. Selecting a slot overwrites any previous save in that slot.</p>
+
+<h4>Auto-Save</h4>
+<p>The game automatically saves to the auto-save slot periodically during gameplay. This happens silently in the background. If the game crashes or the browser is closed, you can resume from the last auto-save.</p>
+
+<h4>Loading a Game</h4>
+<p>From the <b>main menu</b>, click <b>Load Game</b> to see all available save slots. Each slot shows the day number, time of day, population count, and when the save was created. Click <b>Load</b> to restore that save. The Load Game button only appears if saves exist.</p>
+
+<h4>Deleting Saves</h4>
+<p>In the Load Game panel, each save slot has a <b>Delete</b> button to permanently remove that save.</p>
+
+<h4>What Gets Saved</h4>
+<p>Everything: terrain, buildings, NPCs (with their personalities, memories, relationships, mood), resources, animals, fire state, disease clouds, camera position, time of day, and event scheduler state. When loaded, the game resumes exactly where it left off.</p>
+
+<h4>Compression</h4>
+<p>Save data is automatically compressed to fit within the browser's storage limits. Old saves from earlier versions are migrated and compressed automatically. This process is invisible to the player — saving and loading work the same way.</p>
+
+<p class="kb-tip">Tip: Save before risky decisions like large military orders or building near enemy territory. You can always load a previous save if things go wrong!</p>`;
             }
         }
     },
@@ -487,10 +786,8 @@ const KnowledgeBase = {
     init() {
         const overlay = document.getElementById('knowledgeBaseOverlay');
         const closeBtn = document.getElementById('kbClose');
-        const helpBtn = document.getElementById('btnHelp');
         const nav = document.getElementById('kbNav');
 
-        helpBtn.addEventListener('click', () => this.open());
         closeBtn.addEventListener('click', () => this.close());
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) this.close();

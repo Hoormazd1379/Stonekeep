@@ -36,7 +36,10 @@ const Military = {
             World.npcs.splice(World.npcs.indexOf(idlePeasant), 1);
             World.idlePeasants--;
 
-            NPC.spawnTroop(troopType, b.x, b.y + BUILDINGS.barracks.height);
+            const troop = NPC.spawnTroop(troopType, b.x, b.y + BUILDINGS.barracks.height);
+            if (troop) {
+                EventLog.add('info', 'Troop recruited: ' + def.name + ' (' + troop.name + ').', troop.x, troop.y);
+            }
             return true;
         }
 

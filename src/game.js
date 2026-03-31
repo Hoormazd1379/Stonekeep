@@ -29,6 +29,15 @@ const Game = {
         // Initialize time system
         Time.init();
 
+        // Initialize popularity/tax system
+        Popularity.init();
+
+        // Reset event log for a fresh run
+        EventLog.reset();
+
+        // Reset overlay animations
+        Animations.reset();
+
         // Initialize map generator and generate starting area
         MapGenerator.init(seed, worldSize);
         MapGenerator.generateArea(center, center, mapSize);
@@ -88,14 +97,18 @@ const Game = {
         Fire.update();
         Events.update();
         Time.update();
+        Animations.update();
+        SaveLoad.update();
+
+        // Bazaar auto-trade (once per game hour)
+        if (World.tick % CONFIG.TICKS_PER_HOUR === 0) {
+            this._processAutoTrade();
+        }
 
         // Update vision — NPCs discover tiles within vision radius
         this._updateVision();
 
-        // Consume food (every 100 ticks)
-        if (World.tick % 100 === 0) {
-            this._consumeFood();
-        }
+        // Food consumption is now handled per-NPC via hunger system (Phase 3.3)
 
         // Road decay (every 1200 ticks, reduce road levels by 1)
         if (World.tick % 1200 === 0) {
@@ -124,27 +137,8 @@ const Game = {
         }
     },
 
-    _consumeFood() {
-        // SC-accurate ration multiplier (Extra = moderate, Double = highest)
-        const rationMult = { 'Half': 0.5, 'Normal': 1, 'Extra': 2, 'Double': 3 };
-        const mult = rationMult[World.rationLevel] || 1;
-        const needed = Math.ceil(World.population / 4 * mult);
-        if (needed <= 0) return;
-
-        let consumed = 0;
-        const foodTypes = ['apples', 'bread', 'cheese', 'meat'];
-        // Distribute consumption across food types
-        const perType = Math.ceil(needed / foodTypes.length);
-        for (const type of foodTypes) {
-            const available = Resources.get(type);
-            const take = Math.min(perType, available);
-            if (take > 0) {
-                Resources.remove(type, take);
-                consumed += take;
-            }
-            if (consumed >= needed) break;
-        }
-    },
+    // Food consumption is now per-NPC via hunger/eating system (Phase 3.3)
+    // See NPC._updateHunger() and NPC._handleEating()
 
     onSetupComplete() {
         // Spawn starting peasants
@@ -281,6 +275,59 @@ const Game = {
                             tile.lastSeenTick = World.tick;
                         }
                     }
+                }
+            }
+        }
+    },
+
+    // Bazaar auto-trade price table (matches UI._addBazaarActions)
+    _autoTradePrices: {
+        wood: { baseBuy: 8, baseSell: 4 },
+        stone: { baseBuy: 12, baseSell: 6 },
+        iron: { baseBuy: 20, baseSell: 10 },
+        pitch: { baseBuy: 15, baseSell: 7 },
+        apples: { baseBuy: 6, baseSell: 3 },
+        bread: { baseBuy: 10, baseSell: 5 },
+        cheese: { baseBuy: 8, baseSell: 4 },
+        meat: { baseBuy: 8, baseSell: 4 },
+        bows: { baseBuy: 25, baseSell: 12 },
+        spears: { baseBuy: 25, baseSell: 12 },
+        swords: { baseBuy: 40, baseSell: 20 },
+        armor: { baseBuy: 45, baseSell: 22 }
+    },
+
+    _processAutoTrade() {
+        // Requires at least one active bazaar
+        const bazaars = World.getBuildingsOfType('bazaar');
+        if (bazaars.length === 0 || !bazaars.some(b => b.active)) return;
+
+        for (const resId in World.autoTrade) {
+            const rule = World.autoTrade[resId];
+            if (!rule) continue;
+            const prices = this._autoTradePrices[resId];
+            if (!prices) continue;
+
+            // Auto-buy: buy in batches of 5 until stock >= min
+            if (rule.min !== undefined && rule.min > 0) {
+                while (Resources.get(resId) < rule.min) {
+                    const stock = Resources.get(resId);
+                    const mult = Math.max(0.6, Math.min(1.5, 0.6 + stock / 100));
+                    const buyPrice = Math.max(1, Math.round(prices.baseBuy * mult));
+                    if (Resources.get('gold') < buyPrice) break;
+                    Resources.remove('gold', buyPrice);
+                    Resources.add(resId, 5);
+                }
+            }
+
+            // Auto-sell: sell in batches of 5 until stock <= max
+            if (rule.max !== undefined && rule.max !== Infinity && rule.max > 0) {
+                while (Resources.get(resId) > rule.max) {
+                    const stock = Resources.get(resId);
+                    const mult = Math.max(0.6, Math.min(1.5, 0.6 + stock / 100));
+                    const sellPrice = Math.max(1, Math.round(prices.baseSell * mult));
+                    if (Resources.get(resId) < 5) break;
+                    Resources.remove(resId, 5);
+                    Resources.add('gold', sellPrice);
                 }
             }
         }

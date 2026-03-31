@@ -6,6 +6,7 @@
     Renderer.init();
     UI.init();
     Input.init();
+    EventLog.init();
     KnowledgeBase.init();
 
     let minimapTimer = 0;

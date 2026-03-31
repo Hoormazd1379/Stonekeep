@@ -48,6 +48,7 @@ const CONFIG = {
 
     // Worker
     WORKER_SPEED: 1.0,         // tiles per tick (1.0 = 1 tick per tile)
+    TROOP_SPEED_BONUS: 0.15,   // extra speed for troops (+15% faster than workers/bandits)
     GATHER_TICKS: 8,           // ticks to gather a resource
     PRODUCE_TICKS: 10,         // ticks to produce an item
     CARRY_CAPACITY: 1,
@@ -65,14 +66,16 @@ const CONFIG = {
     FIRE_SPREAD_CHANCE: 0.5,    // 50% chance to spread each attempt
     FIRE_NORMAL_DURATION: 240,  // ticks until a normal fire burns out
     FIRE_PITCH_DURATION: 600,   // ticks until a pitch ditch fire burns out
-    FIRE_DAMAGE_INTERVAL: 10,   // ticks between fire damage to buildings
+    FIRE_DAMAGE_INTERVAL: 35,   // ticks between fire damage to buildings (~3.5x slower than original)
     FIRE_BUILDING_HP: 8,        // HP of flammable buildings before fire destroys them
 
     // Events system
     EVENT_GRACE_PERIOD: 2400,           // No events for first 2400 ticks (~20 min at normal speed)
+    EVENT_SAFE_DAYS: 3,                 // No negative events for the first 3 full day/night cycles
     EVENT_BASE_INTERVAL: 4000,          // Base ticks between events (~33 min at normal speed)
     EVENT_MIN_INTERVAL: 1200,           // Minimum ticks between events (~10 min at normal speed)
     EVENT_NOTIFICATION_DURATION: 300,   // Ticks to show notification on screen
+    EVENT_LOG_MAX_ENTRIES: 400,         // Max retained entries in the in-game event log
 
     // Bandits
     BANDIT_MELEE_HP: 12,
@@ -117,10 +120,113 @@ const CONFIG = {
     BANDIT_BUILDING_COOLDOWN: 6,   // Ticks between bandit attacks on buildings
 
     // Time system (Phase 3.1)
-    TICKS_PER_HOUR: 70,           // Game ticks per in-game hour (full day = 1680 ticks = ~14 min at speed 1)
+    TICKS_PER_HOUR: 128,          // Game ticks per in-game hour (full day = 3072 ticks = ~25.6 min at speed 1)
     START_HOUR: 8,                // Starting hour of day (8:00 AM)
     NIGHT_VISION_RADIUS: 10,     // Reduced vision radius at night (vs 15 during day)
     DAWN_VISION_RADIUS: 12,      // Vision radius during dawn/dusk transitions
+
+    // Schedule system (Phase 3.2)
+    SCHEDULE_WORK_START: 6,       // Work phase starts at 6:00
+    SCHEDULE_WORK_END: 15,        // Work phase ends at 15:00 (9 hours)
+    SCHEDULE_FREE_START: 15,      // Free time starts at 15:00
+    SCHEDULE_FREE_END: 22,        // Free time ends at 22:00
+    SCHEDULE_SLEEP_START: 22,     // Sleep phase starts at 22:00
+    SCHEDULE_SLEEP_END: 6,        // Sleep phase ends at 6:00
+    DEFAULT_WORK_HOURS: 9,        // Default work hours per building
+    MIN_WORK_HOURS: 4,            // Minimum adjustable work hours
+    MAX_WORK_HOURS: 12,           // Maximum adjustable work hours
+
+    // Housing tiers (Phase 3.2)
+    PEASANTS_PER_COTTAGE: 6,      // Cottage houses 6 peasants
+    PEASANTS_PER_HOUSE: 4,        // House houses 4 peasants
+    HOMELESS_MOOD_PENALTY: -8,    // Mood penalty for homeless NPCs
+
+    // Hunger system (Phase 3.3)
+    HUNGER_MAX: 100,              // Maximum hunger value
+    HUNGER_START: 80,             // Starting hunger
+    HUNGER_DRAIN_PER_HOUR: 4,     // Hunger loss per game hour (~25 hours to starve from full)
+    HUNGER_EAT_THRESHOLD: 50,     // NPC seeks food below this
+    HUNGER_STARVE_THRESHOLD: 10,  // Below this: take damage
+    HUNGER_WELL_FED: 70,          // Above this: mood bonus
+    HUNGER_MEAL_RESTORE: 60,      // Hunger restored per meal (base, modified by ration level)
+    HUNGER_STARVE_DAMAGE: 1,      // HP lost per starvation tick
+    HUNGER_STARVE_INTERVAL: 128,  // Ticks between starvation damage (1 per game hour)
+    HUNGER_EAT_TICKS: 4,          // Ticks to eat a meal at granary
+    TROOP_HUNGER_INTERVAL: 256,   // Ticks between troop auto-eat checks (2 game hours)
+
+    // Social interactions (Phase 3.7)
+    SOCIAL_MEETING_MIN_TICKS: 3,
+    SOCIAL_MEETING_MAX_TICKS: 6,
+    SOCIAL_MEETING_CHANCE: 0.18,       // chance when two eligible NPCs are nearby
+    SOCIAL_MEETING_COOLDOWN: 60,       // per-NPC cooldown after social interaction
+    SOCIAL_SEEK_RADIUS: 8,
+    SOCIAL_LOW_MOOD_THRESHOLD: 45,
+    SOCIAL_SIGHTING_INTERVAL: 12,
+    SOCIAL_SIGHTING_RANGE: 2,
+    INN_SOCIAL_RANGE: 4,
+    INN_SOCIAL_ALE_COST: 1,
+    INN_SOCIAL_MOOD_BONUS: 2,
+
+    // Resource reservation system (Phase 3.7)
+    RESOURCE_RESERVATION_TTL: 64,
+
+    // Conflict, crime, and desertion (Phase 3.8)
+    CIVILIAN_FIGHT_CHECK_INTERVAL: 5,
+    CIVILIAN_FIGHT_CHANCE: 0.14,
+    CIVILIAN_FIGHT_MIN_TICKS: 6,
+    CIVILIAN_FIGHT_MAX_TICKS: 12,
+    CIVILIAN_FIGHT_DAMAGE_COOLDOWN: 4,
+    CIVILIAN_FIGHT_RELATIONSHIP_PENALTY: 12,
+    CIVILIAN_CONFLICT_COOLDOWN: 96,
+    THEFT_CHECK_INTERVAL: 24,
+    THEFT_BASE_CHANCE: 0.08,
+    THEFT_MIN_AMOUNT: 1,
+    THEFT_MAX_AMOUNT: 3,
+    THEFT_WITNESS_RANGE: 8,
+    THEFT_DURATION_TICKS: 4,
+    DESERTION_MIN_DESPERATE_DAYS: 3,
+    DESERTION_CHECK_INTERVAL: 128,
+    DESERTION_BASE_CHANCE: 0.03,
+    DESERTION_DISTANCE_FROM_KEEP: 500,
+
+    // Fatigue system (Phase 3.3)
+    FATIGUE_MAX: 100,             // Maximum fatigue value
+    FATIGUE_START: 0,             // Starting fatigue
+    FATIGUE_WORK_BASE: 0.8,      // Base fatigue gain per game hour of work
+    FATIGUE_SLEEP_RECOVERY: 15,   // Fatigue recovered per game hour of sleep
+    FATIGUE_HIGH: 80,             // Above this: reduced production speed (50%)
+    FATIGUE_EXHAUSTION: 100,      // At 100: stop working, must rest
+    FATIGUE_TROOP_SLEEP_RECOVERY: 10, // Troop fatigue recovery per hour sleeping at post
+
+    // Health regen (Phase 3.3)
+    HEALTH_REGEN_PER_HOUR: 1,    // HP restored per hour while sleeping (not starving/diseased)
+    LOW_HEALTH_THRESHOLD: 0.3,   // Below 30% HP: reduced speed/output
+
+    // Fatigue rates by building type (multiplier on FATIGUE_WORK_BASE)
+    FATIGUE_RATES: {
+        quarry: 2.0,              // Heavy labor
+        ironMine: 1.8,            // Heavy labor
+        woodcutter: 1.5,          // Moderate labor
+        pitchRig: 1.3,            // Moderate labor
+        wheatFarm: 1.0,           // Light labor
+        appleOrchard: 0.8,        // Light labor
+        dairyFarm: 0.8,           // Light labor
+        hopsFarm: 0.9,            // Light labor
+        windmill: 1.2,            // Moderate
+        bakery: 1.0,              // Moderate
+        brewery: 1.0,             // Moderate
+        hunterPost: 1.6,          // Active hunting
+        fletcher: 1.0,            // Craft
+        poleturner: 1.0,          // Craft
+        blacksmith: 1.5,          // Heavy craft
+        armorer: 1.5,             // Heavy craft
+        chapel: 0.5,              // Light
+        church: 0.5,              // Light
+        cathedral: 0.5,           // Light
+        well: 1.2,                // Moderate (firefighting)
+        apothecary: 0.8,          // Light
+        inn: 0.6                  // Light
+    },
 
     // Colors
     COLORS: {

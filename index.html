@@ -331,6 +331,7 @@
             box-sizing: border-box;
             background: rgba(0,0,0,0.85);
             border: 1px solid #444;
+            border-top: none;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -339,6 +340,103 @@
             font-family: monospace;
             font-size: 10px;
             color: #666;
+        }
+        #eventLogPanel {
+            position: absolute;
+            top: 290px;
+            right: 6px;
+            width: 202px;
+            bottom: 164px;
+            box-sizing: border-box;
+            background: rgba(0,0,0,0.9);
+            border: 1px solid #444;
+            border-top: none;
+            display: flex;
+            flex-direction: column;
+            font-family: monospace;
+            color: #ccc;
+        }
+        #eventLogHeader {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 2px 6px;
+            border-bottom: 1px solid #333;
+            font-size: 10px;
+            color: #c8a82e;
+        }
+        #eventLogFilters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px;
+            padding: 3px 4px;
+            border-bottom: 1px solid #222;
+        }
+        #eventLogFilters button {
+            padding: 0 4px;
+            background: #1a1a1a;
+            color: #888;
+            border: 1px solid #333;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 9px;
+            line-height: 1.4;
+        }
+        #eventLogFilters button.active,
+        #eventLogFilters button:hover {
+            color: #c8a82e;
+            border-color: #c8a82e;
+        }
+        #eventLogList {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px;
+            font-size: 10px;
+            line-height: 1.2;
+        }
+        .event-log-empty {
+            color: #777;
+            padding: 4px;
+        }
+        .event-log-row {
+            border-left: 2px solid #666;
+            background: rgba(255,255,255,0.02);
+            margin-bottom: 3px;
+            padding: 3px 4px;
+        }
+        .event-log-head {
+            color: #999;
+            margin-bottom: 1px;
+        }
+        .event-log-time {
+            color: #aaa;
+        }
+        .event-log-tag {
+            text-transform: uppercase;
+            font-size: 9px;
+        }
+        .event-log-body {
+            color: #ddd;
+            word-break: break-word;
+        }
+        .event-log-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 2px;
+        }
+        .event-log-actions .event-goto {
+            padding: 0 4px;
+            background: #222;
+            color: #c8a82e;
+            border: 1px solid #555;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 9px;
+        }
+        .event-log-actions .event-goto:disabled {
+            color: #555;
+            border-color: #333;
+            cursor: default;
         }
         #minimapRibbon #btnHelp {
             padding: 1px 6px;
@@ -483,6 +581,7 @@
         <h1>STONEKEEP</h1>
         <div class="subtitle">A Castle Builder</div>
         <button id="btnNewGame">New Game</button>
+        <button id="btnLoadGame" style="display:none">Load Game</button>
         <button id="btnContinue" style="display:none">Continue</button>
     </div>
 
@@ -506,9 +605,19 @@
         <button id="btnBackToMenu">Back</button>
     </div>
 
+    <!-- Load Game Panel -->
+    <div id="loadGamePanel" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;flex-direction:column;align-items:center;justify-content:center;background:#000;z-index:10;">
+        <h2 style="font-size:28px;color:#c8a82e;margin-bottom:20px;font-family:monospace;">LOAD GAME</h2>
+        <div id="saveSlotList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;width:340px;"></div>
+        <button id="btnBackFromLoad" style="display:block;width:220px;padding:10px;font-size:14px;font-family:monospace;background:#1a1a1a;color:#c8a82e;border:1px solid #444;cursor:pointer;">Back</button>
+    </div>
+
     <!-- HUD -->
     <div id="hud">
         <div id="topBar">
+            <button id="btnNpcList" style="padding:2px 8px;font-size:11px;cursor:pointer;background:#333;color:#c8a82e;border:1px solid #555;font-family:monospace" title="Villager List">Villagers</button>
+            <button id="btnHelpHud" style="padding:2px 8px;font-size:11px;cursor:pointer;background:#333;color:#c8a82e;border:1px solid #555;font-family:monospace" title="Knowledge Base">?</button>
+            <button id="btnSaveGame" style="padding:2px 8px;font-size:11px;cursor:pointer;background:#333;color:#c8a82e;border:1px solid #555;font-family:monospace" title="Save Game">Save</button>
             <div class="resource-display">Gold: <span id="resGold">0</span></div>
             <div class="resource-display">Wood: <span id="resWood">0</span></div>
             <div class="resource-display">Stone: <span id="resStone">0</span></div>
@@ -533,17 +642,31 @@
             <span class="clock-time" id="clockTime">08:00</span>
             <span class="clock-phase" id="clockPhase">Day</span>
             <span class="clock-day" id="clockDay">Day 1</span>
+            <span class="clock-schedule" id="clockSchedule" style="font-size:9px;color:#888;margin-left:4px"></span>
         </div>
         <div id="minimapRibbon">
             <div id="speedControls">
-                <button data-speed="0">⏸</button>
-                <button data-speed="1" class="active">▶</button>
-                <button data-speed="2">▶▶</button>
-                <button data-speed="3">▶▶▶</button>
-                <button data-speed="4">▶▶▶▶</button>
-                <button data-speed="5">▶▶▶▶▶</button>
+                <button data-speed="0">||</button>
+                <button data-speed="1" class="active">&gt;</button>
+                <button data-speed="2">&gt;&gt;</button>
+                <button data-speed="3">&gt;&gt;&gt;</button>
+                <button data-speed="4">&gt;&gt;&gt;&gt;</button>
+                <button data-speed="5">&gt;&gt;&gt;&gt;&gt;</button>
             </div>
-            <button id="btnHelp">?</button>
+        </div>
+        <div id="eventLogPanel">
+            <div id="eventLogHeader">
+                <span>Event Log</span>
+            </div>
+            <div id="eventLogFilters">
+                <button data-event-filter="all" class="active">All</button>
+                <button data-event-filter="danger">Danger</button>
+                <button data-event-filter="warning">Warn</button>
+                <button data-event-filter="caution">Caution</button>
+                <button data-event-filter="positive">Good</button>
+                <button data-event-filter="info">Info</button>
+            </div>
+            <div id="eventLogList"></div>
         </div>
         <div id="bottomPanel">
             <div id="buildMenu"></div>
@@ -568,7 +691,7 @@
     <div id="knowledgeBaseOverlay">
         <div id="knowledgeBasePanel">
             <div id="kbHeader">
-                <h2>&#x1F4DC; Stonekeep Knowledge Base</h2>
+                <h2>Stonekeep Knowledge Base</h2>
                 <button id="kbClose">&times;</button>
             </div>
             <div id="kbNav"></div>
@@ -593,11 +716,18 @@
     <script src="src/production.js"></script>
     <script src="src/animal.js"></script>
     <script src="src/fire.js"></script>
+    <script src="src/personality.js"></script>
+    <script src="src/mood.js"></script>
+    <script src="src/memory.js"></script>
+    <script src="src/relationship.js"></script>
     <script src="src/npc.js"></script>
     <script src="src/popularity.js"></script>
     <script src="src/military.js"></script>
     <script src="src/events.js"></script>
     <script src="src/time.js"></script>
+    <script src="src/eventLog.js"></script>
+    <script src="src/animations.js"></script>
+    <script src="src/saveLoad.js"></script>
     <script src="src/knowledgeBase.js"></script>
     <script src="src/ui.js"></script>
     <script src="src/game.js"></script>

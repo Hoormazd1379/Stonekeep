@@ -61,8 +61,39 @@ const BUILDINGS = {
         width: 1, height: 1,
         cost: { wood: 6 },
         housing: 8,
+        housingTier: 1,
         flammable: true,
-        description: 'Houses 8 peasants.',
+        description: 'Houses 8 peasants. Basic shelter.',
+        walkable: false
+    },
+    cottage: {
+        id: 'cottage',
+        name: 'Cottage',
+        category: 'housing',
+        char: 'c',
+        fg: '#bb9966',
+        bg: '#2a1500',
+        width: 2, height: 2,
+        cost: { wood: 12, stone: 5 },
+        housing: 6,
+        housingTier: 2,
+        flammable: true,
+        description: 'Houses 6 peasants. Better quality than hovels — less fatigue recovery time.',
+        walkable: false
+    },
+    house: {
+        id: 'house',
+        name: 'House',
+        category: 'housing',
+        char: 'O',
+        fg: '#ccaa77',
+        bg: '#332211',
+        width: 2, height: 2,
+        cost: { wood: 20, stone: 10, iron: 5 },
+        housing: 4,
+        housingTier: 3,
+        flammable: true,
+        description: 'Houses 4 peasants. Best quality — fastest fatigue recovery and mood bonus.',
         walkable: false
     },
 
@@ -722,7 +753,7 @@ const BUILDINGS = {
 // Build categories for UI
 const BUILD_CATEGORIES = [
     { id: 'castle',    name: 'Castle',    buildings: ['keep', 'granary', 'stockpile'] },
-    { id: 'housing',   name: 'Housing',   buildings: ['hovel'] },
+    { id: 'housing',   name: 'Housing',   buildings: ['hovel', 'cottage', 'house'] },
     { id: 'resource',  name: 'Industry',  buildings: ['woodcutter', 'quarry', 'ironMine', 'pitchRig'] },
     { id: 'food',      name: 'Food',      buildings: ['appleOrchard', 'wheatFarm', 'windmill', 'bakery', 'dairyFarm', 'hunterPost', 'hopsFarm', 'brewery'] },
     { id: 'military',  name: 'Military',  buildings: ['fletcher', 'poleturner', 'blacksmith', 'armorer', 'armory', 'barracks'] },

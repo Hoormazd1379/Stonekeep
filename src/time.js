@@ -32,6 +32,8 @@ const Time = {
             if (this.hour >= 24) {
                 this.hour = 0;
                 this.day++;
+                // Daily relationship drift for coworkers (Phase 3.6)
+                if (typeof Relationship !== 'undefined') Relationship.updateCoworkerDrift();
             }
             this._updatePhase();
         }

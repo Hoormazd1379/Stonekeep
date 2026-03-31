@@ -284,6 +284,7 @@ const BuildingPlacement = {
         }
 
         World.addBuilding(building);
+        EventLog.add('positive', 'Construction completed: ' + def.name + '.', building.x, building.y);
 
         // Handle setup phase
         if (World.gamePhase === 'setup') {
@@ -317,6 +318,7 @@ const BuildingPlacement = {
         // Handle housing
         if (def.housing) {
             World.maxPopulation += def.housing;
+            NPC.reassignAllHomes();
         }
 
         // Handle happiness buildings

@@ -8,6 +8,10 @@ const Camera = {
     targetX: 0,
     targetY: 0,
     _followNpcId: null,
+    _shakeIntensity: 0,
+    _shakeDuration: 0,
+    _shakeOffsetX: 0,
+    _shakeOffsetY: 0,
 
     init(centerX, centerY) {
         const px = centerX * CONFIG.TILE_WIDTH - Renderer.width / 2;
@@ -66,7 +70,28 @@ const Camera = {
         // Smooth scrolling
         this.x += (this.targetX - this.x) * 0.2;
         this.y += (this.targetY - this.y) * 0.2;
+
+        // Camera shake
+        if (this._shakeDuration > 0) {
+            this._shakeDuration--;
+            const t = this._shakeDuration / 10; // decay
+            const intensity = this._shakeIntensity * Math.min(1, t);
+            this._shakeOffsetX = (Math.random() - 0.5) * 2 * intensity;
+            this._shakeOffsetY = (Math.random() - 0.5) * 2 * intensity;
+            this.x += this._shakeOffsetX;
+            this.y += this._shakeOffsetY;
+        } else {
+            this._shakeOffsetX = 0;
+            this._shakeOffsetY = 0;
+        }
+
         this.clamp();
+    },
+
+    /** Trigger camera shake. intensity = pixel offset, duration = ticks. */
+    shake(intensity, duration) {
+        this._shakeIntensity = intensity;
+        this._shakeDuration = duration;
     },
 
     clamp() {

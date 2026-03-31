@@ -31,7 +31,17 @@ const NPC = {
         FIRE_EXTINGUISH: 'fireExtinguish',
         // Apothecary healer states
         DISEASE_WALK_TO_CLOUD: 'diseaseWalkToCloud',
-        DISEASE_HEAL: 'diseaseHeal'
+        DISEASE_HEAL: 'diseaseHeal',
+        // Schedule states (Phase 3.2)
+        WALK_HOME: 'walkHome',
+        SLEEPING: 'sleeping',
+        WALK_TO_EAT: 'walkToEat',
+        EATING: 'eating',
+        SOCIALIZING: 'socializing',
+        FIGHTING: 'fighting',
+        WALK_TO_STEAL: 'walkToSteal',
+        STEALING: 'stealing',
+        DESERTING: 'deserting'
     },
 
     // Name pools for procedural name generation
@@ -97,11 +107,52 @@ const NPC = {
             walkFrom: null,  // {x, y} origin of current walk
             walkTo: null,    // {x, y} destination of current walk
             walkPurpose: '',  // description of current activity
-            idleReason: ''    // reason for being idle (displayed in info panel)
+            idleReason: '',   // reason for being idle (displayed in info panel)
+            // Schedule & needs (Phase 3.2/3.3)
+            homeBuilding: null,   // building id of assigned home
+            schedulePhase: 'work', // 'work', 'free', 'sleep'
+            hunger: CONFIG.HUNGER_START,
+            fatigue: CONFIG.FATIGUE_START,
+            lastAteType: null,     // last food type consumed
+            foodTypesEaten: [],    // food types eaten today (for variety)
+            lastAteDay: 0,         // day number when food variety was last reset
+            _hungerAccum: 0,       // tick accumulator for hunger drain
+            _fatigueAccum: 0,      // tick accumulator for fatigue changes
+            _starveAccum: 0,       // tick accumulator for starvation damage
+            _regenAccum: 0,        // tick accumulator for health regen
+            _eatTimer: 0,          // ticks spent eating
+            _socialUntil: 0,
+            _socialPartnerId: null,
+            _socialTone: null,
+            _socialCooldownUntil: 0,
+            _recentSocialMood: 0,
+            _recentSocialMoodUntil: 0,
+            _fightTargetId: null,
+            _fightUntil: 0,
+            _fightId: 0,
+            _conflictCooldownUntil: 0,
+            _desperateSinceDay: null,
+            _desertTarget: null,
+            _desertingSinceTick: 0,
+            _theftTargetBuildingId: null,
+            _theftTargetType: null,
+            _theftAmount: 0,
+            _theftTimer: 0
         };
+        // Assign personality traits (Phase 3.4)
+        Personality.assignTraits(npc);
+        npc.mood = 50;           // current mood (0-100)
+        npc.happiness = 50;      // individual happiness (0-100)
+        npc.memories = [];       // memory log (Phase 3.5)
+        npc.relationships = {};  // relationship map (Phase 3.6)
         World.npcs.push(npc);
         World.population++;
         World.idlePeasants++;
+        // Assign home
+        this._assignHome(npc);
+        // Initial memory
+        Memory.add(npc, 'arrived', Memory.PRIORITY.ROUTINE, npc.name + ' arrived at the settlement.', [], true);
+        EventLog.add('positive', npc.name + ' arrived at the settlement.', npc.x, npc.y);
         return npc;
     },
 
@@ -130,10 +181,62 @@ const NPC = {
             moveProgress: 0,
             walkFrom: null,
             walkTo: null,
-            walkPurpose: ''
+            walkPurpose: '',
+            // Troop needs (Phase 3.2/3.3)
+            hunger: CONFIG.HUNGER_START,
+            fatigue: CONFIG.FATIGUE_START,
+            _hungerAccum: 0,
+            _starveAccum: 0,
+            _fatigueAccum: 0,
+            _regenAccum: 0,
+            isSleepingAtPost: false  // troops sleep at their post when fatigued & safe
         };
+        npc.memories = [];       // memory log (Phase 3.5)
+        npc.relationships = {};  // relationship map (Phase 3.6)
         World.npcs.push(npc);
         return npc;
+    },
+
+    // ── Data-driven social interaction tones ──
+    // Adding a new tone = add one entry here
+    SOCIAL_TONES: {
+        pleasant: {
+            relThreshold: 20,    // min average relationship
+            moodThreshold: 50,   // min average mood
+            relAbove: true,      // relationship must be >= threshold
+            moodAbove: true,     // mood must be >= threshold
+            baseDeltaMin: 3,     // min relationship change
+            baseDeltaMax: 8,     // max relationship change
+            negative: false,     // delta is positive
+            memoryType: 'pleasant_chat',
+            memoryText: 'had a pleasant chat with',
+            socialMood: 3,
+            priority: 1          // higher priority = checked first
+        },
+        argument: {
+            relThreshold: -15,
+            moodThreshold: 45,
+            relAbove: false,     // relationship must be <= threshold
+            moodAbove: false,    // mood must be <= threshold
+            baseDeltaMin: 5,
+            baseDeltaMax: 15,
+            negative: true,
+            memoryType: 'argument',
+            memoryText: 'argued with',
+            socialMood: -3,
+            priority: 0
+        },
+        neutral: {
+            relThreshold: null,  // null = always matches (fallback)
+            moodThreshold: null,
+            baseDeltaMin: 1,
+            baseDeltaMax: 1,
+            negative: false,
+            memoryType: 'memory_shared',
+            memoryText: 'shared stories with',
+            socialMood: 1,
+            priority: -1
+        }
     },
 
     // Spatial grid for fast NPC lookups
@@ -141,6 +244,12 @@ const NPC = {
     _grid: null,
     _gridW: 0,
     _gridH: 0,
+
+    // Resource reservation maps (Phase 3.7)
+    _treeReservations: {},   // key "x,y" -> { npcId, untilTick }
+    _animalReservations: {}, // animalId -> { npcId, untilTick }
+    _fightSeq: 0,
+    _resolvedFightIds: {},
 
     _rebuildGrid() {
         const cell = this._GRID_CELL;
@@ -188,7 +297,66 @@ const NPC = {
         return best;
     },
 
+    _clearExpiredReservations() {
+        const now = World.tick;
+
+        for (const [key, r] of Object.entries(this._treeReservations)) {
+            const owner = World.npcs.find(n => n.id === r.npcId);
+            if (!owner || now > r.untilTick) delete this._treeReservations[key];
+        }
+
+        for (const [id, r] of Object.entries(this._animalReservations)) {
+            const animalId = parseInt(id, 10);
+            const owner = World.npcs.find(n => n.id === r.npcId);
+            const animal = Animal._animals.find(a => a.id === animalId && !a.dead);
+            if (!owner || !animal || now > r.untilTick) delete this._animalReservations[id];
+        }
+    },
+
+    _reserveTree(npc, x, y) {
+        const key = x + ',' + y;
+        this._treeReservations[key] = {
+            npcId: npc.id,
+            untilTick: World.tick + CONFIG.RESOURCE_RESERVATION_TTL
+        };
+        npc._reservedTreeKey = key;
+    },
+
+    _releaseTreeReservation(npc) {
+        if (!npc || !npc._reservedTreeKey) return;
+        const r = this._treeReservations[npc._reservedTreeKey];
+        if (r && r.npcId === npc.id) delete this._treeReservations[npc._reservedTreeKey];
+        npc._reservedTreeKey = null;
+    },
+
+    _isTreeReservedByOther(x, y, npcId) {
+        const r = this._treeReservations[x + ',' + y];
+        return !!(r && r.npcId !== npcId && r.untilTick >= World.tick);
+    },
+
+    _reserveAnimal(npc, animalId) {
+        this._animalReservations[animalId] = {
+            npcId: npc.id,
+            untilTick: World.tick + CONFIG.RESOURCE_RESERVATION_TTL
+        };
+        npc._reservedAnimalId = animalId;
+    },
+
+    _releaseAnimalReservation(npc) {
+        if (!npc || !npc._reservedAnimalId) return;
+        const id = String(npc._reservedAnimalId);
+        const r = this._animalReservations[id];
+        if (r && r.npcId === npc.id) delete this._animalReservations[id];
+        npc._reservedAnimalId = null;
+    },
+
+    _isAnimalReservedByOther(animalId, npcId) {
+        const r = this._animalReservations[String(animalId)];
+        return !!(r && r.npcId !== npcId && r.untilTick >= World.tick);
+    },
+
     update() {
+        this._clearExpiredReservations();
         this._rebuildGrid();
         for (const npc of World.npcs) {
             if (npc.isBandit) {
@@ -198,6 +366,13 @@ const NPC = {
             } else if (npc.type in TROOPS) {
                 this._updateTroop(npc);
             }
+        }
+
+        // Phase 3.7: social interactions and routine sightings during free time
+        this._tryStartSocialMeetings();
+        this._tryStartCivilianConflicts();
+        if (World.tick % CONFIG.SOCIAL_SIGHTING_INTERVAL === 0) {
+            this._recordRoutineSightings();
         }
 
         // Update idle peasant count
@@ -213,10 +388,11 @@ const NPC = {
 
     // ── NPC Damage & Death ──
 
-    damageNpc(npcId, amount) {
+    damageNpc(npcId, amount, source) {
         const npc = World.npcs.find(n => n.id === npcId);
         if (!npc) return false;
 
+        if (source) npc._lastDamageSource = source;
         npc.hp -= amount;
         if (npc.hp <= 0) {
             this.killNpc(npc);
@@ -225,11 +401,13 @@ const NPC = {
         return false; // still alive
     },
 
-    killNpc(npc) {
+    _removeNpcFromWorld(npc) {
         const idx = World.npcs.indexOf(npc);
         if (idx === -1) return;
 
-        // Release from building if assigned
+        this._releaseTreeReservation(npc);
+        this._releaseAnimalReservation(npc);
+
         if (npc.assignedBuilding) {
             const building = World.buildings.find(b => b.id === npc.assignedBuilding);
             if (building) {
@@ -238,11 +416,9 @@ const NPC = {
             }
         }
 
-        // Deselect if selected
         const selIdx = World.selectedUnits.indexOf(npc.id);
         if (selIdx !== -1) World.selectedUnits.splice(selIdx, 1);
 
-        // Update population counters (bandits don't affect population)
         if (!npc.isBandit) {
             if (npc.type === 'peasant' || npc.type === 'worker') {
                 World.population--;
@@ -252,8 +428,35 @@ const NPC = {
             }
         }
 
-        // Remove from world
         World.npcs.splice(idx, 1);
+    },
+
+    killNpc(npc) {
+        if (World.npcs.indexOf(npc) === -1) return;
+
+        // Death skull animation
+        Animations.add(npc.x, npc.y, 'skull');
+        Animations.removeByNpc(npc.id);
+
+        // Memory: witnesses remember the death
+        if (!npc.isBandit) {
+            // Build death message with cause and occupation
+            let occupation = 'Idle';
+            if (npc.type in TROOPS) {
+                occupation = TROOPS[npc.type].name;
+            } else if (npc.assignedBuilding) {
+                const b = World.buildings.find(b => b.id === npc.assignedBuilding);
+                if (b) occupation = BUILDINGS[b.type].name + ' worker';
+            }
+            const cause = npc._lastDamageSource || 'unknown causes';
+            const deathMsg = npc.name + ' (' + occupation + ') died from ' + cause + '.';
+            Memory.addToWitnesses(npc.x, npc.y, 'npc_died', Memory.PRIORITY.DEATH, deathMsg, [npc.id]);
+            EventLog.add('danger', deathMsg, npc.x, npc.y);
+        } else {
+            Memory.addToWitnesses(npc.x, npc.y, 'bandit_killed', Memory.PRIORITY.COMBAT, 'A bandit was slain.', [npc.id]);
+            EventLog.add('info', 'A bandit was slain.', npc.x, npc.y);
+        }
+        this._removeNpcFromWorld(npc);
     },
 
     _autoAssignWorkers() {
@@ -268,30 +471,309 @@ const NPC = {
         }
     },
 
+    // ── Schedule & Needs System (Phase 3.2/3.3) ──
+
+    _getSchedulePhase() {
+        const h = Time.hour;
+        if (h >= CONFIG.SCHEDULE_WORK_START && h < CONFIG.SCHEDULE_WORK_END) return 'work';
+        if (h >= CONFIG.SCHEDULE_FREE_START && h < CONFIG.SCHEDULE_FREE_END) return 'free';
+        return 'sleep'; // 22:00-6:00 (wraps around midnight)
+    },
+
+    // Get effective work start/end for a specific building
+    _getBuildingWorkHours(building) {
+        const start = building.workHoursStart !== undefined ? building.workHoursStart : CONFIG.SCHEDULE_WORK_START;
+        const hours = building.workHoursDuration !== undefined ? building.workHoursDuration : CONFIG.DEFAULT_WORK_HOURS;
+        return { start, end: start + hours };
+    },
+
+    // Check if a building's worker is a service worker (works during work+free time)
+    _isServiceBuilding(def) {
+        return !!(def.isWell || def.isReligious || def.isApothecary || def.isInn);
+    },
+
+    // Check if it's currently work time for a specific NPC
+    _isWorkTimeForNpc(npc) {
+        const phase = this._getSchedulePhase();
+        if (phase === 'sleep') return false;
+        if (!npc.assignedBuilding) return phase === 'work';
+
+        const building = World.buildings.find(b => b.id === npc.assignedBuilding);
+        if (!building) return phase === 'work';
+        const def = BUILDINGS[building.type];
+
+        // Service workers work during both work and free time
+        if (this._isServiceBuilding(def)) return phase === 'work' || phase === 'free';
+
+        // Regular workers: check building-specific work hours
+        if (phase === 'work') {
+            const wh = this._getBuildingWorkHours(building);
+            const h = Time.hour;
+            return h >= wh.start && h < wh.end;
+        }
+        return false;
+    },
+
+    // ── Home Assignment ──
+
+    _assignHome(npc) {
+        // Find a housing building with available capacity
+        const housingBuildings = World.buildings.filter(b => {
+            const d = BUILDINGS[b.type];
+            return d && d.housing;
+        });
+
+        // Sort by tier (prefer higher tier homes if available)
+        housingBuildings.sort((a, b) => {
+            const da = BUILDINGS[a.type], db = BUILDINGS[b.type];
+            return (db.housingTier || 1) - (da.housingTier || 1);
+        });
+
+        for (const hb of housingBuildings) {
+            const d = BUILDINGS[hb.type];
+            const residents = World.npcs.filter(n => n.homeBuilding === hb.id).length;
+            if (residents < d.housing) {
+                npc.homeBuilding = hb.id;
+                return;
+            }
+        }
+        // No home available - npc remains homeless
+        npc.homeBuilding = null;
+    },
+
+    // Reassign homes for all NPCs (call when housing built/destroyed)
+    reassignAllHomes() {
+        // Clear all assignments
+        for (const npc of World.npcs) {
+            if (npc.isBandit || npc.type in TROOPS) continue;
+            npc.homeBuilding = null;
+        }
+        // Reassign in order
+        for (const npc of World.npcs) {
+            if (npc.isBandit || npc.type in TROOPS) continue;
+            this._assignHome(npc);
+        }
+    },
+
+    // Get housing tier bonus for fatigue recovery (higher tier = faster recovery)
+    _getHousingTierBonus(npc) {
+        if (!npc.homeBuilding) return 0.5; // Homeless: half recovery
+        const b = World.buildings.find(b => b.id === npc.homeBuilding);
+        if (!b) return 0.5;
+        const def = BUILDINGS[b.type];
+        const tier = def.housingTier || 1;
+        // Tier 1 (hovel) = 1.0x, Tier 2 (cottage) = 1.25x, Tier 3 (house) = 1.5x
+        return 0.75 + tier * 0.25;
+    },
+
+    // ── Hunger System ──
+
+    _updateHunger(npc) {
+        // Drain hunger over time
+        npc._hungerAccum = (npc._hungerAccum || 0) + 1;
+        if (npc._hungerAccum >= CONFIG.TICKS_PER_HOUR) {
+            npc._hungerAccum = 0;
+            npc.hunger = Math.max(0, npc.hunger - CONFIG.HUNGER_DRAIN_PER_HOUR);
+        }
+
+        // Starvation damage
+        if (npc.hunger <= CONFIG.HUNGER_STARVE_THRESHOLD) {
+            npc._starveAccum = (npc._starveAccum || 0) + 1;
+            if (npc._starveAccum >= CONFIG.HUNGER_STARVE_INTERVAL) {
+                npc._starveAccum = 0;
+                npc.hp = Math.max(0, npc.hp - CONFIG.HUNGER_STARVE_DAMAGE);
+                // Hunger sweat animation on starvation tick
+                if (!Animations.hasNpcAnimation(npc.id, 'hunger')) {
+                    Animations.add(npc.x, npc.y, 'hunger', null, { npcId: npc.id });
+                }
+                if (npc.hp <= 0) {
+                    this.killNpc(npc);
+                }
+            }
+        }
+    },
+
+    // Get hunger-restored amount based on ration level
+    _getMealRestore() {
+        // Each food unit restores 50 hunger; NPCs eat 2 units per meal = full bar
+        return 50;
+    },
+
+    // Find the best food to eat (prefers variety)
+    _chooseFoodToEat(npc) {
+        const foodTypes = ['apples', 'bread', 'cheese', 'meat'];
+        // Reset variety tracking each day
+        if (npc.lastAteDay !== Time.day) {
+            npc.foodTypesEaten = [];
+            npc.lastAteDay = Time.day;
+        }
+        // Prefer food types not yet eaten today
+        for (const f of foodTypes) {
+            if (!npc.foodTypesEaten.includes(f) && Resources.get(f) > 0) return f;
+        }
+        // Otherwise eat any available food
+        for (const f of foodTypes) {
+            if (Resources.get(f) > 0) return f;
+        }
+        return null;
+    },
+
+    // ── Fatigue System ──
+
+    _updateFatigue(npc, isWorking) {
+        npc._fatigueAccum = (npc._fatigueAccum || 0) + 1;
+        if (npc._fatigueAccum >= CONFIG.TICKS_PER_HOUR) {
+            npc._fatigueAccum = 0;
+            if (isWorking && npc.assignedBuilding) {
+                // Accumulate fatigue during work (modified by personality)
+                const building = World.buildings.find(b => b.id === npc.assignedBuilding);
+                const bType = building ? building.type : 'default';
+                const rate = CONFIG.FATIGUE_RATES[bType] || 1.0;
+                const traitMult = Personality.getMultiplier(npc, 'fatigueRateMult');
+                npc.fatigue = Math.min(CONFIG.FATIGUE_MAX, npc.fatigue + CONFIG.FATIGUE_WORK_BASE * rate * traitMult);
+            }
+        }
+    },
+
+    _updateSleepRecovery(npc) {
+        npc._fatigueAccum = (npc._fatigueAccum || 0) + 1;
+        if (npc._fatigueAccum >= CONFIG.TICKS_PER_HOUR) {
+            npc._fatigueAccum = 0;
+            const tierBonus = this._getHousingTierBonus(npc);
+            npc.fatigue = Math.max(0, npc.fatigue - CONFIG.FATIGUE_SLEEP_RECOVERY * tierBonus);
+
+            // Health regen during sleep (if not starving and not diseased)
+            if (npc.hunger > CONFIG.HUNGER_STARVE_THRESHOLD && !npc.diseased) {
+                npc.hp = Math.min(npc.maxHp, npc.hp + CONFIG.HEALTH_REGEN_PER_HOUR);
+            }
+        }
+    },
+
+    // Get production speed multiplier from fatigue, health, mood, and personality
+    _getFatigueEfficiency(npc) {
+        let mult = 1.0;
+        // High fatigue: 50% speed
+        if (npc.fatigue >= CONFIG.FATIGUE_HIGH) mult *= 0.5;
+        // Low health: 50% speed
+        if (npc.hp / npc.maxHp < CONFIG.LOW_HEALTH_THRESHOLD) mult *= 0.5;
+        // Personality work speed modifier
+        mult *= Personality.getMultiplier(npc, 'workSpeedMult');
+        // Mood work speed modifier
+        mult *= Mood.getWorkSpeedMult(npc);
+        return mult;
+    },
+
+    // ── Worker Update (modified for schedule) ──
+
     _updateWorker(npc) {
-        // Flee from nearby bandits (workers don't fight)
+        // Update hunger (always ticks regardless of state)
+        this._updateHunger(npc);
+
+        // Update schedule phase
+        npc.schedulePhase = this._getSchedulePhase();
+        this._updateDesperationTracker(npc);
+
+        if (npc.state === this.STATE.DESERTING) {
+            this._handleDeserting(npc);
+            return;
+        }
+
+        if (npc.state === this.STATE.FIGHTING) {
+            this._handleCivilianFight(npc);
+            return;
+        }
+
+        if (npc.state === this.STATE.WALK_TO_STEAL || npc.state === this.STATE.STEALING) {
+            if (npc.state === this.STATE.WALK_TO_STEAL) this._walkAlongPath(npc);
+            else this._handleStealing(npc);
+            return;
+        }
+
+        // Starvation interrupt: if starving and food available, drop everything and eat
+        if (npc.hunger <= CONFIG.HUNGER_STARVE_THRESHOLD
+            && npc.state !== this.STATE.EATING
+            && npc.state !== this.STATE.WALK_TO_EAT) {
+            const hasFood = this._chooseFoodToEat(npc);
+            if (hasFood) {
+                npc.walkPurpose = 'starving - must eat';
+                this._goEat(npc);
+                return;
+            }
+        }
+
+        // Flee from nearby bandits (workers don't fight — modified by personality)
         if (!npc._fleeCooldown) npc._fleeCooldown = 0;
         if (npc._fleeCooldown > 0) npc._fleeCooldown--;
         if (npc._fleeCooldown <= 0) {
             const wx = Math.floor(npc.x), wy = Math.floor(npc.y);
             const nearBandit = this._findNearestBandit(wx, wy, 6);
             if (nearBandit) {
-                // Run away from the bandit
-                const bx = Math.floor(nearBandit.x), by = Math.floor(nearBandit.y);
-                const dx = wx - bx;
-                const dy = wy - by;
-                const fleeX = wx + (dx === 0 ? (Math.random() < 0.5 ? 3 : -3) : Math.sign(dx) * 5);
-                const fleeY = wy + (dy === 0 ? (Math.random() < 0.5 ? 3 : -3) : Math.sign(dy) * 5);
-                npc.walkPurpose = 'fleeing from bandits';
-                npc._fleeCooldown = 10;
-                this._walkTo(npc, Math.round(fleeX), Math.round(fleeY), this.STATE.WALK_TO_WORK, this.STATE.IDLE);
-                return;
+                // Brave NPCs may not flee (fleeChance modifier reduces chance)
+                const fleeMod = Personality.getModifier(npc, 'fleeChance');
+                const baseFlee = 1.0; // default: always flee
+                if (Math.random() < Math.max(0, baseFlee + fleeMod)) {
+                    // Limit flee memory to once per day to prevent spam
+                    if (!npc._fleeMemoryDay || npc._fleeMemoryDay !== Time.day) {
+                        npc._fleeMemoryDay = Time.day;
+                        Memory.add(npc, 'fled_danger', Memory.PRIORITY.COMBAT, npc.name + ' fled from bandits.', [], true);
+                    }
+                    // Wake up if sleeping
+                    if (npc.state === this.STATE.SLEEPING) {
+                        npc.state = this.STATE.IDLE;
+                    }
+                    const bx = Math.floor(nearBandit.x), by = Math.floor(nearBandit.y);
+                    const dx = wx - bx;
+                    const dy = wy - by;
+                    const fleeX = wx + (dx === 0 ? (Math.random() < 0.5 ? 3 : -3) : Math.sign(dx) * 5);
+                    const fleeY = wy + (dy === 0 ? (Math.random() < 0.5 ? 3 : -3) : Math.sign(dy) * 5);
+                    npc.walkPurpose = 'fleeing from bandits';
+                    npc._fleeCooldown = 10;
+                    this._walkTo(npc, Math.round(fleeX), Math.round(fleeY), this.STATE.WALK_TO_WORK, this.STATE.IDLE);
+                    return;
+                }
             }
         }
 
+        // Determine if NPC is currently in a work state (for fatigue tracking)
+        const workStates = [this.STATE.WALK_TO_RESOURCE, this.STATE.GATHER_RESOURCE, this.STATE.WORKING,
+            this.STATE.WALK_TO_WORK, this.STATE.WALK_TO_PICKUP, this.STATE.PICKUP_RESOURCE,
+            this.STATE.DELIVER_RESOURCE, this.STATE.RETURN_TO_WORK, this.STATE.WALK_TO_STOCKPILE,
+            this.STATE.DEPOSIT_RESOURCE, this.STATE.HUNT_WALK_TO_PREY, this.STATE.HUNT_SHOOT,
+            this.STATE.HUNT_WALK_TO_CARCASS, this.STATE.HUNT_PICKUP_CARCASS, this.STATE.HUNT_CARRY_CARCASS,
+            this.STATE.HUNT_BUTCHER, this.STATE.HUNT_DELIVER_MEAT, this.STATE.FIRE_WALK_TO_WELL,
+            this.STATE.FIRE_FILL_BUCKET, this.STATE.FIRE_WALK_TO_FIRE, this.STATE.FIRE_EXTINGUISH,
+            this.STATE.DISEASE_WALK_TO_CLOUD, this.STATE.DISEASE_HEAL];
+        const isWorking = workStates.includes(npc.state);
+        if (isWorking) this._updateFatigue(npc, true);
+
         switch (npc.state) {
             case this.STATE.IDLE:
-                this._idleBehavior(npc);
+                this._idleBehaviorScheduled(npc);
+                break;
+            case this.STATE.WALK_HOME:
+            case this.STATE.WALK_TO_EAT:
+                this._walkAlongPath(npc);
+                break;
+            case this.STATE.SLEEPING:
+                this._handleSleeping(npc);
+                break;
+            case this.STATE.EATING:
+                this._handleEating(npc);
+                break;
+            case this.STATE.SOCIALIZING:
+                this._handleSocializing(npc);
+                break;
+            case this.STATE.FIGHTING:
+                this._handleCivilianFight(npc);
+                break;
+            case this.STATE.WALK_TO_STEAL:
+                this._walkAlongPath(npc);
+                break;
+            case this.STATE.STEALING:
+                this._handleStealing(npc);
+                break;
+            case this.STATE.DESERTING:
+                this._handleDeserting(npc);
                 break;
             case this.STATE.WALK_TO_RESOURCE:
             case this.STATE.WALK_TO_STOCKPILE:
@@ -342,6 +824,81 @@ const NPC = {
     },
 
     _updateTroop(npc) {
+        // ── Troop hunger: food teleportation (consume from granary without walking) ──
+        npc._hungerAccum = (npc._hungerAccum || 0) + 1;
+        if (npc._hungerAccum >= CONFIG.TICKS_PER_HOUR) {
+            npc._hungerAccum = 0;
+            npc.hunger = Math.max(0, npc.hunger - CONFIG.HUNGER_DRAIN_PER_HOUR);
+        }
+        // Auto-eat from granary every TROOP_HUNGER_INTERVAL ticks
+        if (npc.hunger < CONFIG.HUNGER_EAT_THRESHOLD && World.tick % CONFIG.TROOP_HUNGER_INTERVAL === 0) {
+            for (let i = 0; i < 2; i++) {
+                const food = this._chooseFoodToEat(npc);
+                if (food) {
+                    Resources.remove(food, 1);
+                    npc.hunger = Math.min(CONFIG.HUNGER_MAX, npc.hunger + this._getMealRestore());
+                    npc.lastAteType = food;
+                    if (!npc.foodTypesEaten) npc.foodTypesEaten = [];
+                    if (!npc.foodTypesEaten.includes(food)) npc.foodTypesEaten.push(food);
+                } else {
+                    break;
+                }
+            }
+        }
+        // Starvation damage
+        if (npc.hunger <= CONFIG.HUNGER_STARVE_THRESHOLD) {
+            npc._starveAccum = (npc._starveAccum || 0) + 1;
+            if (npc._starveAccum >= CONFIG.HUNGER_STARVE_INTERVAL) {
+                npc._starveAccum = 0;
+                npc._lastDamageSource = 'starvation';
+                npc.hp -= CONFIG.HUNGER_STARVE_DAMAGE;
+                if (npc.hp <= 0) {
+                    npc.hp = 0;
+                    this.damageNpc(npc.id, 0, 'starvation'); // trigger death
+                    return;
+                }
+            }
+        }
+
+        // ── Troop fatigue: accumulate on patrol, recover when sleeping at post ──
+        if (npc.isSleepingAtPost) {
+            npc._fatigueAccum = (npc._fatigueAccum || 0) + 1;
+            if (npc._fatigueAccum >= CONFIG.TICKS_PER_HOUR) {
+                npc._fatigueAccum = 0;
+                npc.fatigue = Math.max(0, npc.fatigue - CONFIG.FATIGUE_TROOP_SLEEP_RECOVERY);
+                // Health regen during sleep
+                if (npc.hunger > CONFIG.HUNGER_STARVE_THRESHOLD && !npc.diseased) {
+                    npc.hp = Math.min(npc.maxHp, npc.hp + CONFIG.HEALTH_REGEN_PER_HOUR);
+                }
+            }
+            // Wake conditions: enemies nearby, selected, or ordered
+            const nx = Math.floor(npc.x), ny = Math.floor(npc.y);
+            const enemyNear = this._findNearestBandit(nx, ny, CONFIG.BANDIT_DETECT_RANGE);
+            if (enemyNear || npc._attackTarget || npc._attackMoveTarget || npc.fatigue <= 10) {
+                npc.isSleepingAtPost = false;
+                npc.state = this.STATE.IDLE;
+            }
+            return; // Don't do anything else while sleeping
+        }
+
+        // Fatigue accumulates while on active duty (1 fatigue per 2 game hours baseline)
+        npc._fatigueAccum = (npc._fatigueAccum || 0) + 1;
+        if (npc._fatigueAccum >= CONFIG.TICKS_PER_HOUR * 2) {
+            npc._fatigueAccum = 0;
+            npc.fatigue = Math.min(CONFIG.FATIGUE_MAX, npc.fatigue + 1);
+        }
+
+        // If very fatigued and it's sleep time and no enemies nearby → sleep at post
+        if (npc.fatigue >= CONFIG.FATIGUE_HIGH && this._getSchedulePhase() === 'sleep') {
+            const nx = Math.floor(npc.x), ny = Math.floor(npc.y);
+            if (!this._findNearestBandit(nx, ny, CONFIG.BANDIT_DETECT_RANGE)) {
+                npc.isSleepingAtPost = true;
+                npc.state = this.STATE.SLEEPING;
+                npc._fatigueAccum = 0;
+                return;
+            }
+        }
+
         // Troops walk along paths when given move orders
         if (npc.state === this.STATE.WALK_TO_WORK) {
             // Attack-move: check for enemies within 10 tiles while moving
@@ -351,6 +908,16 @@ const NPC = {
                 if (nearby) {
                     npc._attackTarget = nearby.id;
                     npc._attackMoveTarget = null;
+                    npc.state = this.STATE.IDLE;
+                    return;
+                }
+            }
+            // Melee troops: stop walking if an enemy is adjacent (prevent tile-swap loop)
+            if (!npc.ranged) {
+                const nx = Math.floor(npc.x), ny = Math.floor(npc.y);
+                const adj = this._findNearestBandit(nx, ny, 1);
+                if (adj) {
+                    npc.path = null;
                     npc.state = this.STATE.IDLE;
                     return;
                 }
@@ -383,7 +950,7 @@ const NPC = {
                                 npc._attackCooldown = 3;
                                 const bonus = Military.getHeightBonus(npc) * Military.getFearDamageBonus();
                                 const damage = Math.max(1, Math.round(npc.damage * bonus));
-                                this.damageNpc(target.id, damage);
+                                this.damageNpc(target.id, damage, 'combat');
                                 if (npc.ranged) Renderer.addProjectile(npc.x, npc.y, tx, ty, '#FFDD44');
                             }
                         }
@@ -436,7 +1003,7 @@ const NPC = {
                             npc._attackCooldown = 3;
                             const bonus = Military.getHeightBonus(npc) * Military.getFearDamageBonus();
                             const damage = Math.max(1, Math.round(npc.damage * bonus));
-                            this.damageNpc(bandit.id, damage);
+                            this.damageNpc(bandit.id, damage, 'combat');
                             if (npc.ranged) Renderer.addProjectile(npc.x, npc.y, bx, by, '#FFDD44');
                         }
                     }
@@ -501,7 +1068,7 @@ const NPC = {
             npc._attackCooldown = 3;
             const bonus = Military.getHeightBonus(npc) * Military.getFearDamageBonus();
             const damage = Math.max(1, Math.round(npc.damage * bonus));
-            this.damageNpc(target.id, damage);
+            this.damageNpc(target.id, damage, 'combat');
         }
     },
 
@@ -510,6 +1077,16 @@ const NPC = {
     _updateBandit(npc) {
         // Walking state
         if (npc.state === this.STATE.WALK_TO_WORK) {
+            // Melee bandits: stop walking if a player NPC is adjacent (prevent tile-swap loop)
+            if (!npc.ranged) {
+                const nx = Math.floor(npc.x), ny = Math.floor(npc.y);
+                const adj = this._findNearestPlayerNpc(nx, ny, 1);
+                if (adj) {
+                    npc.path = null;
+                    npc.state = this.STATE.IDLE;
+                    return;
+                }
+            }
             this._walkAlongPath(npc);
             return;
         }
@@ -530,7 +1107,7 @@ const NPC = {
                 npc._attackCooldown = (npc._attackCooldown || 0) - 1;
                 if (npc._attackCooldown <= 0) {
                     npc._attackCooldown = CONFIG.BANDIT_ATTACK_COOLDOWN;
-                    this.damageNpc(target.id, npc.damage);
+                    this.damageNpc(target.id, npc.damage, 'bandit attack');
                     if (npc.ranged) Renderer.addProjectile(npc.x, npc.y, tx, ty, '#FF4444');
                 }
                 return;
@@ -600,6 +1177,875 @@ const NPC = {
 
     _findNearestPlayerNpc(x, y, range) {
         return this._queryGrid(x, y, range, npc => !npc.isBandit);
+    },
+
+    // ── Schedule-Aware Idle Behavior ──
+
+    _idleBehaviorScheduled(npc) {
+        const phase = npc.schedulePhase;
+
+        if (this._shouldAttemptDesertion(npc)) {
+            this._startDesertion(npc);
+            return;
+        }
+
+        // Exhaustion check: if fatigue at max, must rest regardless of schedule
+        if (npc.fatigue >= CONFIG.FATIGUE_EXHAUSTION) {
+            if (!npc._exhaustionMemoryDay || npc._exhaustionMemoryDay !== Time.day) {
+                npc._exhaustionMemoryDay = Time.day;
+                Memory.add(npc, 'exhaustion', Memory.PRIORITY.NOTABLE_WORK, npc.name + ' collapsed from exhaustion.', [], true);
+            }
+            npc.walkPurpose = 'exhausted - must rest';
+            this._goHomeToSleep(npc);
+            return;
+        }
+
+        // Sleep phase: go home and sleep
+        if (phase === 'sleep') {
+            this._goHomeToSleep(npc);
+            return;
+        }
+
+        // Free time phase: eat if hungry, otherwise wander
+        if (phase === 'free') {
+            if (this._maybeStartTheft(npc)) return;
+
+            // Service workers continue working during free time, but eat if hungry first
+            if (this._isWorkTimeForNpc(npc) && npc.assignedBuilding) {
+                if (npc.hunger < CONFIG.HUNGER_EAT_THRESHOLD) {
+                    this._goEat(npc);
+                    return;
+                }
+                this._idleBehavior(npc);
+                return;
+            }
+            // Hungry? Go eat
+            if (npc.hunger < CONFIG.HUNGER_EAT_THRESHOLD) {
+                this._goEat(npc);
+                return;
+            }
+            // Free time behavior: wander near home or keep
+            this._freeTimeBehavior(npc);
+            return;
+        }
+
+        // Work phase: check if it's this NPC's work time
+        if (this._isWorkTimeForNpc(npc)) {
+            this._idleBehavior(npc);
+            return;
+        }
+
+        // Not work time for this NPC yet (e.g. custom building hours haven't started)
+        // Treat like free time
+        if (npc.hunger < CONFIG.HUNGER_EAT_THRESHOLD) {
+            this._goEat(npc);
+            return;
+        }
+        this._freeTimeBehavior(npc);
+    },
+
+    _goHomeToSleep(npc) {
+        const home = npc.homeBuilding ? World.buildings.find(b => b.id === npc.homeBuilding) : null;
+
+        if (home) {
+            // Check if at home
+            if (this._isAtBuilding(npc, home)) {
+                npc.state = this.STATE.SLEEPING;
+                npc.walkPurpose = 'sleeping';
+                npc._fatigueAccum = 0;
+                return;
+            }
+            // Walk home — pass ownBuildingId so home tiles are passable for pathfinding
+            npc.walkPurpose = 'going home to sleep';
+            this._walkTo(npc, home.x, home.y, this.STATE.WALK_HOME, this.STATE.SLEEPING, { ownBuildingId: home.id });
+        } else {
+            // Homeless: sleep near keep
+            if (World.keepPos) {
+                const kx = World.keepPos.x + 1 + Math.floor(Math.random() * 3) - 1;
+                const ky = World.keepPos.y + 3;
+                const nx = Math.floor(npc.x), ny = Math.floor(npc.y);
+                const distToKeep = Math.abs(nx - kx) + Math.abs(ny - ky);
+                if (distToKeep <= 3) {
+                    npc.state = this.STATE.SLEEPING;
+                    npc.walkPurpose = 'sleeping outdoors';
+                    npc._fatigueAccum = 0;
+                    return;
+                }
+                npc.walkPurpose = 'looking for a place to sleep';
+                this._walkTo(npc, kx, ky, this.STATE.WALK_HOME, this.STATE.SLEEPING);
+            } else {
+                // No keep? Just sleep in place
+                npc.state = this.STATE.SLEEPING;
+                npc.walkPurpose = 'sleeping outdoors';
+                npc._fatigueAccum = 0;
+            }
+        }
+    },
+
+    _handleSleeping(npc) {
+        // Recovery during sleep
+        this._updateSleepRecovery(npc);
+
+        // Wake up conditions
+        const phase = this._getSchedulePhase();
+        if (phase !== 'sleep' && npc.fatigue < CONFIG.FATIGUE_EXHAUSTION) {
+            npc.state = this.STATE.IDLE;
+            npc.walkPurpose = '';
+            return;
+        }
+    },
+
+    _goEat(npc) {
+        // Check if food is available
+        const foodType = this._chooseFoodToEat(npc);
+        if (!foodType) {
+            npc.idleReason = 'hungry - no food available';
+            this._freeTimeBehavior(npc);
+            return;
+        }
+
+        // Find granary
+        const granary = World.buildings.find(b => b.type === 'granary');
+        if (!granary) {
+            npc.idleReason = 'hungry - no granary';
+            this._freeTimeBehavior(npc);
+            return;
+        }
+
+        // Check if at granary
+        if (this._isAtBuilding(npc, granary)) {
+            npc.state = this.STATE.EATING;
+            npc.walkPurpose = 'eating';
+            npc._eatTimer = 0;
+            npc._eatingFoodType = foodType;
+            return;
+        }
+
+        // Walk to granary — pass ownBuildingId so granary tiles are passable for pathfinding
+        npc.walkPurpose = 'going to eat';
+        npc._eatingFoodType = foodType;
+        this._walkTo(npc, granary.x, granary.y, this.STATE.WALK_TO_EAT, this.STATE.EATING, { ownBuildingId: granary.id });
+    },
+
+    _handleEating(npc) {
+        npc._eatTimer = (npc._eatTimer || 0) + 1;
+        if (npc._eatTimer >= CONFIG.HUNGER_EAT_TICKS) {
+            // Consume up to 2 food units per meal to fill hunger completely
+            const unitsToEat = 2;
+            for (let i = 0; i < unitsToEat; i++) {
+                const foodType = npc._eatingFoodType || this._chooseFoodToEat(npc);
+                if (foodType && Resources.get(foodType) > 0) {
+                    Resources.remove(foodType, 1);
+                    const restore = this._getMealRestore();
+                    npc.hunger = Math.min(CONFIG.HUNGER_MAX, npc.hunger + restore);
+                    npc.lastAteType = foodType;
+                    if (!npc.foodTypesEaten) npc.foodTypesEaten = [];
+                    if (!npc.foodTypesEaten.includes(foodType)) {
+                        npc.foodTypesEaten.push(foodType);
+                    }
+                    // Pick a new food type for second unit (variety)
+                    npc._eatingFoodType = this._chooseFoodToEat(npc);
+                } else {
+                    break;
+                }
+            }
+            npc._eatTimer = 0;
+            npc._eatingFoodType = null;
+            npc.state = this.STATE.IDLE;
+            npc.walkPurpose = '';
+        }
+    },
+
+    _visitBuilding(npc, building, purpose) {
+        if (!building) return false;
+        npc.walkPurpose = purpose;
+        this._walkTo(npc, building.x, building.y, this.STATE.WALK_TO_WORK, this.STATE.IDLE, { ownBuildingId: building.id });
+        return true;
+    },
+
+    _findNearestActiveInn(x, y) {
+        let best = null;
+        let bestDist = Infinity;
+        for (const b of World.buildings) {
+            if (b.type !== 'inn') continue;
+            if (!b.active || !b.workers || b.workers.length === 0) continue;
+            const dist = Math.abs(b.x - x) + Math.abs(b.y - y);
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = b;
+            }
+        }
+        return best;
+    },
+
+    _findNearestReligiousBuilding(x, y) {
+        let best = null;
+        let bestDist = Infinity;
+        for (const b of World.buildings) {
+            const def = BUILDINGS[b.type];
+            if (!def || !def.isReligious || !b.active) continue;
+            const dist = Math.abs(b.x - x) + Math.abs(b.y - y);
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = b;
+            }
+        }
+        return best;
+    },
+
+    _seekNpcToTalk(npc) {
+        const nx = Math.floor(npc.x), ny = Math.floor(npc.y);
+        const target = this._queryGrid(nx, ny, CONFIG.SOCIAL_SEEK_RADIUS, other => {
+            if (!other || other.id === npc.id || other.isBandit) return false;
+            if (!(other.type === 'peasant' || other.type === 'worker')) return false;
+            if (other.schedulePhase !== 'free') return false;
+            if (other.state === this.STATE.SOCIALIZING) return false;
+            return true;
+        });
+        if (!target) return false;
+        npc.walkPurpose = 'seeking conversation with ' + target.name;
+        this._walkTo(npc, Math.floor(target.x), Math.floor(target.y), this.STATE.WALK_TO_WORK, this.STATE.IDLE);
+        return true;
+    },
+
+    _freeTimeBehavior(npc) {
+        const nx = Math.floor(npc.x), ny = Math.floor(npc.y);
+
+        // High fatigue: rest early at home
+        if (npc.fatigue !== undefined && npc.fatigue >= CONFIG.FATIGUE_HIGH && Math.random() < 0.6) {
+            this._goHomeToSleep(npc);
+            return;
+        }
+
+        // Low mood + social personality: seek someone to talk to
+        const socialMood = Personality.getModifier(npc, 'socialMoodBonus');
+        if ((npc.mood || 50) <= CONFIG.SOCIAL_LOW_MOOD_THRESHOLD && socialMood > 0 && Math.random() < 0.45) {
+            if (this._seekNpcToTalk(npc)) return;
+        }
+
+        // Pious personalities often visit religious buildings during free time
+        const religionSense = Personality.getModifier(npc, 'religionSensitivity');
+        if (religionSense > 0 && Math.random() < 0.3) {
+            const religious = this._findNearestReligiousBuilding(nx, ny);
+            if (religious && this._visitBuilding(npc, religious, 'visiting ' + BUILDINGS[religious.type].name)) return;
+        }
+
+        // Inn social hub preference if ale is available
+        const inn = this._findNearestActiveInn(nx, ny);
+        if (inn && Resources.get('ale') > 0 && Math.random() < 0.35) {
+            if (this._visitBuilding(npc, inn, 'heading to inn')) return;
+        }
+
+        // Default: wander near home/keep with occasional exploration
+        if (Math.random() < 0.03) {
+            let destX;
+            let destY;
+            const home = npc.homeBuilding ? World.buildings.find(b => b.id === npc.homeBuilding) : null;
+            if (home) {
+                destX = home.x + Math.floor(Math.random() * 7) - 3;
+                destY = home.y + Math.floor(Math.random() * 7) - 3;
+            } else if (World.keepPos) {
+                destX = World.keepPos.x + 1 + Math.floor(Math.random() * 9) - 4;
+                destY = World.keepPos.y + 1 + Math.floor(Math.random() * 9) - 4;
+            } else {
+                return;
+            }
+
+            // Small chance to explore farther during free time
+            if (Math.random() < 0.15) {
+                destX += Math.floor(Math.random() * 11) - 5;
+                destY += Math.floor(Math.random() * 11) - 5;
+            }
+
+            if (World.isWalkable(destX, destY)) {
+                npc.walkPurpose = 'wandering (free time)';
+                npc.path = Pathfinding.findPath(Math.floor(npc.x), Math.floor(npc.y), destX, destY);
+                if (npc.path && npc.path.length > 1) {
+                    npc.pathIndex = 1;
+                    npc.state = this.STATE.WALK_TO_WORK;
+                    npc._arrivalState = this.STATE.IDLE;
+                    npc.moveProgress = 0;
+                    npc.walkFrom = { x: Math.floor(npc.x), y: Math.floor(npc.y) };
+                    npc.walkTo = { x: destX, y: destY };
+                }
+            }
+        }
+    },
+
+    _startSocialMeeting(a, b) {
+        if (!a || !b) return;
+        if (a.state === this.STATE.SOCIALIZING || b.state === this.STATE.SOCIALIZING) return;
+
+        const relAB = Relationship.get(a, b.id);
+        const relBA = Relationship.get(b, a.id);
+        const relAvg = (relAB + relBA) / 2;
+        const moodAvg = ((a.mood || 50) + (b.mood || 50)) / 2;
+
+        // Select tone from data-driven table (sorted by priority descending)
+        const sorted = Object.entries(this.SOCIAL_TONES).sort((x, y) => y[1].priority - x[1].priority);
+        let tone = 'neutral';
+        let toneDef = this.SOCIAL_TONES.neutral;
+        for (const [key, def] of sorted) {
+            if (def.relThreshold === null) { tone = key; toneDef = def; break; }
+            const relMatch = def.relAbove ? (relAvg >= def.relThreshold) : (relAvg <= def.relThreshold);
+            const moodMatch = def.moodAbove ? (moodAvg >= def.moodThreshold) : (moodAvg <= def.moodThreshold);
+            if (relMatch && moodMatch) { tone = key; toneDef = def; break; }
+        }
+
+        const range = toneDef.baseDeltaMax - toneDef.baseDeltaMin + 1;
+        let baseDelta = toneDef.baseDeltaMin + Math.floor(Math.random() * range);
+        if (toneDef.negative) baseDelta = -baseDelta;
+
+        const inn = this._findNearestActiveInn(Math.floor((a.x + b.x) / 2), Math.floor((a.y + b.y) / 2));
+        let innBonus = 0;
+        if (inn) {
+            const distA = Math.abs(Math.floor(a.x) - inn.x) + Math.abs(Math.floor(a.y) - inn.y);
+            const distB = Math.abs(Math.floor(b.x) - inn.x) + Math.abs(Math.floor(b.y) - inn.y);
+            if (distA <= CONFIG.INN_SOCIAL_RANGE && distB <= CONFIG.INN_SOCIAL_RANGE && Resources.get('ale') >= CONFIG.INN_SOCIAL_ALE_COST) {
+                Resources.remove('ale', CONFIG.INN_SOCIAL_ALE_COST);
+                innBonus = 2;
+            }
+        }
+
+        let deltaA = baseDelta + innBonus;
+        let deltaB = baseDelta + innBonus;
+        deltaA *= Personality.getMultiplier(a, 'relationshipGainRate');
+        deltaB *= Personality.getMultiplier(b, 'relationshipGainRate');
+
+        if (deltaA < 0 && Personality.getModifier(a, 'fightChance') > 0) deltaA *= 1.25;
+        if (deltaB < 0 && Personality.getModifier(b, 'fightChance') > 0) deltaB *= 1.25;
+
+        const oldAB = Relationship.get(a, b.id);
+        const oldBA = Relationship.get(b, a.id);
+        Relationship.change(a, b.id, Math.round(deltaA));
+        Relationship.change(b, a.id, Math.round(deltaB));
+        const newAB = Relationship.get(a, b.id);
+        const newBA = Relationship.get(b, a.id);
+
+        const shareCountA = 1 + Math.floor(Math.random() * 3);
+        const shareCountB = 1 + Math.floor(Math.random() * 3);
+        for (const entry of Memory.selectToShare(a, shareCountA)) {
+            Memory.receiveSecondhand(b, entry);
+        }
+        for (const entry of Memory.selectToShare(b, shareCountB)) {
+            Memory.receiveSecondhand(a, entry);
+        }
+
+        const toneType = toneDef.memoryType;
+        const toneText = toneDef.memoryText;
+        Memory.add(a, toneType, Memory.PRIORITY.SOCIAL, a.name + ' ' + toneText + ' ' + b.name + '.', [b.id], true);
+        Memory.add(b, toneType, Memory.PRIORITY.SOCIAL, b.name + ' ' + toneText + ' ' + a.name + '.', [a.id], true);
+
+        if (oldAB < 50 && newAB >= 50) {
+            Memory.add(a, 'friendship_formed', Memory.PRIORITY.MAJOR_SOCIAL, a.name + ' became close friends with ' + b.name + '.', [b.id], true);
+            EventLog.add('positive', a.name + ' and ' + b.name + ' became close friends.', Math.floor((a.x + b.x) / 2), Math.floor((a.y + b.y) / 2));
+            Animations.add(a.x, a.y, 'heart', null, { npcId: a.id });
+            Animations.add(b.x, b.y, 'heart', null, { npcId: b.id });
+        }
+        if (oldBA < 50 && newBA >= 50) {
+            Memory.add(b, 'friendship_formed', Memory.PRIORITY.MAJOR_SOCIAL, b.name + ' became close friends with ' + a.name + '.', [a.id], true);
+        }
+        if (oldAB > -10 && newAB <= -10) {
+            Memory.add(a, 'rivalry_formed', Memory.PRIORITY.MAJOR_SOCIAL, a.name + ' became rivals with ' + b.name + '.', [b.id], true);
+            EventLog.add('caution', a.name + ' and ' + b.name + ' became rivals.', Math.floor((a.x + b.x) / 2), Math.floor((a.y + b.y) / 2));
+        }
+        if (oldBA > -10 && newBA <= -10) {
+            Memory.add(b, 'rivalry_formed', Memory.PRIORITY.MAJOR_SOCIAL, b.name + ' became rivals with ' + a.name + '.', [a.id], true);
+        }
+
+        const socialMood = toneDef.socialMood;
+        const moodBonus = socialMood + (innBonus > 0 ? CONFIG.INN_SOCIAL_MOOD_BONUS : 0);
+        const until = World.tick + CONFIG.TICKS_PER_HOUR;
+        a._recentSocialMood = moodBonus;
+        b._recentSocialMood = moodBonus;
+        a._recentSocialMoodUntil = until;
+        b._recentSocialMoodUntil = until;
+
+        const duration = CONFIG.SOCIAL_MEETING_MIN_TICKS + Math.floor(Math.random() * (CONFIG.SOCIAL_MEETING_MAX_TICKS - CONFIG.SOCIAL_MEETING_MIN_TICKS + 1));
+        a.state = this.STATE.SOCIALIZING;
+        b.state = this.STATE.SOCIALIZING;
+        a._socialUntil = World.tick + duration;
+        b._socialUntil = World.tick + duration;
+        a._socialPartnerId = b.id;
+        b._socialPartnerId = a.id;
+        a._socialTone = tone;
+        b._socialTone = tone;
+        a.walkPurpose = 'socializing with ' + b.name;
+        b.walkPurpose = 'socializing with ' + a.name;
+    },
+
+    _handleSocializing(npc) {
+        if (!npc._socialUntil || npc._socialUntil <= World.tick) {
+            npc.state = this.STATE.IDLE;
+            npc._socialUntil = 0;
+            npc._socialTone = null;
+            npc._socialPartnerId = null;
+            npc._socialCooldownUntil = World.tick + CONFIG.SOCIAL_MEETING_COOLDOWN;
+            npc.walkPurpose = '';
+            return;
+        }
+
+        const partner = World.npcs.find(n => n.id === npc._socialPartnerId);
+        if (!partner || partner.isBandit) {
+            npc.state = this.STATE.IDLE;
+            npc._socialUntil = 0;
+            npc._socialTone = null;
+            npc._socialPartnerId = null;
+            npc._socialCooldownUntil = World.tick + CONFIG.SOCIAL_MEETING_COOLDOWN;
+            npc.walkPurpose = '';
+        }
+    },
+
+    _tryStartSocialMeetings() {
+        if (World.tick % 3 !== 0) return;
+
+        for (const npc of World.npcs) {
+            if (npc.isBandit) continue;
+            if (!(npc.type === 'peasant' || npc.type === 'worker')) continue;
+            if (npc.schedulePhase !== 'free') continue;
+            if (npc.state !== this.STATE.IDLE) continue;
+            if (npc._socialCooldownUntil && npc._socialCooldownUntil > World.tick) continue;
+
+            const nx = Math.floor(npc.x), ny = Math.floor(npc.y);
+            const other = this._queryGrid(nx, ny, 2, candidate => {
+                if (!candidate || candidate.id === npc.id || candidate.isBandit) return false;
+                if (!(candidate.type === 'peasant' || candidate.type === 'worker')) return false;
+                if (candidate.schedulePhase !== 'free') return false;
+                if (candidate.state !== this.STATE.IDLE) return false;
+                if (candidate._socialCooldownUntil && candidate._socialCooldownUntil > World.tick) return false;
+                return true;
+            });
+
+            if (!other) continue;
+            if (Math.random() <= CONFIG.SOCIAL_MEETING_CHANCE) {
+                this._startSocialMeeting(npc, other);
+            }
+        }
+    },
+
+    _recordRoutineSightings() {
+        for (const npc of World.npcs) {
+            if (npc.isBandit) continue;
+            if (!(npc.type === 'peasant' || npc.type === 'worker')) continue;
+            if (npc.schedulePhase !== 'free') continue;
+            if (npc.state === this.STATE.SOCIALIZING) continue;
+
+            const nx = Math.floor(npc.x), ny = Math.floor(npc.y);
+            const seen = this._queryGrid(nx, ny, CONFIG.SOCIAL_SIGHTING_RANGE, other => {
+                if (!other || other.id === npc.id || other.isBandit) return false;
+                return (other.type === 'peasant' || other.type === 'worker');
+            });
+
+            if (!seen) continue;
+            if (!npc._sightingDayByNpc) npc._sightingDayByNpc = {};
+            if (npc._sightingDayByNpc[seen.id] === Time.day) continue;
+
+            npc._sightingDayByNpc[seen.id] = Time.day;
+            Memory.add(
+                npc,
+                'routine_sighting',
+                Memory.PRIORITY.ROUTINE_SIGHTING,
+                npc.name + ' saw ' + seen.name + ' passing by.',
+                [seen.id],
+                true
+            );
+        }
+    },
+
+    _isCivilian(npc) {
+        return !!(npc && !npc.isBandit && (npc.type === 'peasant' || npc.type === 'worker'));
+    },
+
+    _getNearbyWitnesses(x, y, range, excludeIds) {
+        const excluded = new Set(excludeIds || []);
+        return World.npcs.filter(npc => {
+            if (!this._isCivilian(npc)) return false;
+            if (excluded.has(npc.id)) return false;
+            const dist = Math.abs(Math.floor(npc.x) - x) + Math.abs(Math.floor(npc.y) - y);
+            return dist <= range;
+        });
+    },
+
+    _tryStartCivilianConflicts() {
+        if (World.tick % CONFIG.CIVILIAN_FIGHT_CHECK_INTERVAL !== 0) return;
+
+        for (const npc of World.npcs) {
+            if (!this._isCivilian(npc)) continue;
+            if (npc.state !== this.STATE.IDLE) continue;
+            if (npc.schedulePhase === 'sleep') continue;
+            if (npc._conflictCooldownUntil && npc._conflictCooldownUntil > World.tick) continue;
+            if ((npc.mood || 50) >= 20) continue;
+
+            const nx = Math.floor(npc.x);
+            const ny = Math.floor(npc.y);
+            const other = this._queryGrid(nx, ny, 1, candidate => {
+                if (!this._isCivilian(candidate)) return false;
+                if (candidate.id === npc.id) return false;
+                if (candidate.state !== this.STATE.IDLE) return false;
+                if (candidate.schedulePhase === 'sleep') return false;
+                if (candidate._conflictCooldownUntil && candidate._conflictCooldownUntil > World.tick) return false;
+                return true;
+            });
+            if (!other) continue;
+
+            const rel = Relationship.get(npc, other.id);
+            const otherRel = Relationship.get(other, npc.id);
+            if (rel > -10 && otherRel > -10) continue;
+
+            const moodPressure = Math.max(0, (20 - Math.min(npc.mood || 50, other.mood || 50)) / 20);
+            const aggression = Math.max(0, Personality.getModifier(npc, 'fightChance'))
+                + Math.max(0, Personality.getModifier(other, 'fightChance'));
+            const peacefulness = Math.abs(Math.min(0, Personality.getModifier(npc, 'fightChance')))
+                + Math.abs(Math.min(0, Personality.getModifier(other, 'fightChance')));
+            const chance = Utils.clamp(
+                CONFIG.CIVILIAN_FIGHT_CHANCE + moodPressure * 0.18 + aggression * 0.12 - peacefulness * 0.08,
+                0.02,
+                0.75
+            );
+            if (Math.random() < chance) {
+                this._startCivilianFight(npc, other);
+            }
+        }
+    },
+
+    _startCivilianFight(a, b) {
+        if (!a || !b) return;
+        if (a.state === this.STATE.FIGHTING || b.state === this.STATE.FIGHTING) return;
+
+        const fightId = ++this._fightSeq;
+        const duration = CONFIG.CIVILIAN_FIGHT_MIN_TICKS
+            + Math.floor(Math.random() * (CONFIG.CIVILIAN_FIGHT_MAX_TICKS - CONFIG.CIVILIAN_FIGHT_MIN_TICKS + 1));
+
+        a.state = this.STATE.FIGHTING;
+        b.state = this.STATE.FIGHTING;
+        a._fightTargetId = b.id;
+        b._fightTargetId = a.id;
+        a._fightUntil = World.tick + duration;
+        b._fightUntil = World.tick + duration;
+        a._fightId = fightId;
+        b._fightId = fightId;
+        a._attackCooldown = 0;
+        b._attackCooldown = 0;
+        a.walkPurpose = 'fighting with ' + b.name;
+        b.walkPurpose = 'fighting with ' + a.name;
+
+        if (!a._fightHistory) a._fightHistory = {};
+        if (!b._fightHistory) b._fightHistory = {};
+        a._fightHistory[b.id] = (a._fightHistory[b.id] || 0) + 1;
+        b._fightHistory[a.id] = (b._fightHistory[a.id] || 0) + 1;
+
+        const description = a.name + ' and ' + b.name + ' got into a fight.';
+        EventLog.add('warning', a.name + ' and ' + b.name + ' started a fight.', Math.floor((a.x + b.x) / 2), Math.floor((a.y + b.y) / 2));
+        Memory.add(a, 'npc_fight', Memory.PRIORITY.COMBAT, description, [b.id], true);
+        Memory.add(b, 'npc_fight', Memory.PRIORITY.COMBAT, description, [a.id], true);
+        Memory.addToWitnesses(Math.floor((a.x + b.x) / 2), Math.floor((a.y + b.y) / 2), 'npc_fight', Memory.PRIORITY.COMBAT,
+            description, [a.id, b.id], [a.id, b.id]);
+
+        Relationship.change(a, b.id, -CONFIG.CIVILIAN_FIGHT_RELATIONSHIP_PENALTY);
+        Relationship.change(b, a.id, -CONFIG.CIVILIAN_FIGHT_RELATIONSHIP_PENALTY);
+
+        if ((a._fightHistory[b.id] || 0) >= 2) {
+            Relationship.set(a, b.id, Math.min(Relationship.get(a, b.id), -60));
+        }
+        if ((b._fightHistory[a.id] || 0) >= 2) {
+            Relationship.set(b, a.id, Math.min(Relationship.get(b, a.id), -60));
+        }
+    },
+
+    _resolveCivilianFight(npc, target) {
+        const fightId = npc && npc._fightId;
+        if (!fightId || this._resolvedFightIds[fightId]) return;
+        this._resolvedFightIds[fightId] = true;
+
+        const aliveNpc = npc && World.npcs.includes(npc) ? npc : null;
+        const aliveTarget = target && World.npcs.includes(target) ? target : null;
+        let winner = null;
+        let loser = null;
+
+        if (aliveNpc && (!aliveTarget || aliveTarget.hp <= 0)) {
+            winner = aliveNpc;
+            loser = target;
+        } else if (aliveTarget && (!aliveNpc || aliveNpc.hp <= 0)) {
+            winner = aliveTarget;
+            loser = npc;
+        } else if (aliveNpc && aliveTarget) {
+            const npcRatio = aliveNpc.maxHp > 0 ? aliveNpc.hp / aliveNpc.maxHp : 0;
+            const targetRatio = aliveTarget.maxHp > 0 ? aliveTarget.hp / aliveTarget.maxHp : 0;
+            if (npcRatio > targetRatio) {
+                winner = aliveNpc;
+                loser = aliveTarget;
+            } else if (targetRatio > npcRatio) {
+                winner = aliveTarget;
+                loser = aliveNpc;
+            }
+        }
+
+        if (winner && loser && loser.id !== undefined) {
+            const satisfied = Personality.getModifier(winner, 'fightChance') > 0 && Personality.getModifier(winner, 'peaceMoodBonus') <= 0;
+            const winnerType = satisfied ? 'won_fight_satisfied' : 'won_fight_guilty';
+            const winnerText = satisfied
+                ? winner.name + ' felt vindicated after beating ' + loser.name + ' in a fight.'
+                : winner.name + ' felt guilty after beating ' + loser.name + ' in a fight.';
+            Memory.add(winner, winnerType, Memory.PRIORITY.COMBAT, winnerText, [loser.id], true);
+            if (World.npcs.includes(loser)) {
+                Memory.add(loser, 'lost_fight', Memory.PRIORITY.COMBAT, loser.name + ' lost a fight with ' + winner.name + '.', [winner.id], true);
+            }
+            Relationship.change(winner, loser.id, -6);
+            if (World.npcs.includes(loser)) Relationship.change(loser, winner.id, -10);
+        }
+
+        for (const participant of [aliveNpc, aliveTarget]) {
+            if (!participant) continue;
+            participant.state = this.STATE.IDLE;
+            participant.walkPurpose = '';
+            participant._fightTargetId = null;
+            participant._fightUntil = 0;
+            participant._fightId = 0;
+            participant._conflictCooldownUntil = World.tick + CONFIG.CIVILIAN_CONFLICT_COOLDOWN;
+        }
+    },
+
+    _handleCivilianFight(npc) {
+        const target = World.npcs.find(n => n.id === npc._fightTargetId);
+        if (!target || npc._fightUntil <= World.tick || Math.abs(Math.floor(npc.x) - Math.floor(target.x)) + Math.abs(Math.floor(npc.y) - Math.floor(target.y)) > 1) {
+            this._resolveCivilianFight(npc, target);
+            return;
+        }
+
+        npc._attackCooldown = (npc._attackCooldown || 0) - 1;
+        if (npc._attackCooldown <= 0) {
+            npc._attackCooldown = CONFIG.CIVILIAN_FIGHT_DAMAGE_COOLDOWN;
+            const aggressionBonus = Personality.getModifier(npc, 'fightChance') > 0 ? 1 : 0;
+            const damage = Math.max(1, npc.damage + aggressionBonus);
+            this.damageNpc(target.id, damage, 'brawl');
+        }
+    },
+
+    _pickTheftChoice(npc) {
+        const granary = World.buildings.find(b => b.type === 'granary');
+        const stockpile = World.buildings.find(b => b.type === 'stockpile');
+        const foodTypes = ['apples', 'bread', 'cheese', 'meat'].filter(type => Resources.get(type) > 0);
+        const stockpileTypes = ['ale', 'wood', 'stone', 'iron', 'pitch', 'hops', 'wheat', 'flour']
+            .filter(type => Resources.get(type) > 0);
+
+        const wantsFood = npc.hunger < CONFIG.HUNGER_EAT_THRESHOLD && foodTypes.length > 0 && granary;
+        if (wantsFood) {
+            return {
+                building: granary,
+                type: foodTypes[Math.floor(Math.random() * foodTypes.length)],
+                amount: Math.min(CONFIG.THEFT_MAX_AMOUNT, Math.max(CONFIG.THEFT_MIN_AMOUNT, 1 + Math.floor(Math.random() * 2)))
+            };
+        }
+
+        if (stockpile && stockpileTypes.length > 0) {
+            return {
+                building: stockpile,
+                type: stockpileTypes[Math.floor(Math.random() * stockpileTypes.length)],
+                amount: Math.min(CONFIG.THEFT_MAX_AMOUNT, Math.max(CONFIG.THEFT_MIN_AMOUNT, 1 + Math.floor(Math.random() * 3)))
+            };
+        }
+
+        if (granary && foodTypes.length > 0) {
+            return {
+                building: granary,
+                type: foodTypes[Math.floor(Math.random() * foodTypes.length)],
+                amount: CONFIG.THEFT_MIN_AMOUNT
+            };
+        }
+
+        return null;
+    },
+
+    _maybeStartTheft(npc) {
+        if (World.tick % CONFIG.THEFT_CHECK_INTERVAL !== 0) return false;
+        if ((npc.mood || 50) > 9) return false;
+        if (Personality.getModifier(npc, 'theftChance') <= 0) return false;
+        if (npc.state !== this.STATE.IDLE) return false;
+
+        const chance = Utils.clamp(
+            CONFIG.THEFT_BASE_CHANCE + Personality.getModifier(npc, 'theftChance') * 0.5,
+            0.03,
+            0.35
+        );
+        if (Math.random() >= chance) return false;
+
+        const theft = this._pickTheftChoice(npc);
+        if (!theft) return false;
+
+        npc._theftTargetBuildingId = theft.building.id;
+        npc._theftTargetType = theft.type;
+        npc._theftAmount = theft.amount;
+        npc._theftTimer = 0;
+        npc.walkPurpose = 'sneaking to steal ' + theft.type;
+
+        if (this._isAtBuilding(npc, theft.building)) {
+            npc.state = this.STATE.STEALING;
+            Animations.add(npc.x, npc.y, 'sweat', null, { npcId: npc.id });
+            return true;
+        }
+
+        this._walkTo(npc, theft.building.x, theft.building.y, this.STATE.WALK_TO_STEAL, this.STATE.STEALING, { ownBuildingId: theft.building.id });
+        return true;
+    },
+
+    _handleStealing(npc) {
+        const building = World.buildings.find(b => b.id === npc._theftTargetBuildingId);
+        if (!building || !npc._theftTargetType) {
+            npc.state = this.STATE.IDLE;
+            npc.walkPurpose = '';
+            return;
+        }
+
+        npc._theftTimer = (npc._theftTimer || 0) + 1;
+        if (npc._theftTimer < CONFIG.THEFT_DURATION_TICKS) return;
+
+        const amount = Math.min(npc._theftAmount || 0, Resources.get(npc._theftTargetType));
+        if (amount <= 0 || !Resources.remove(npc._theftTargetType, amount)) {
+            npc.state = this.STATE.IDLE;
+            npc.walkPurpose = '';
+            npc._theftTimer = 0;
+            return;
+        }
+
+        const isFood = STORAGE_TYPES.granary.includes(npc._theftTargetType);
+        if (isFood) {
+            npc.hunger = Math.min(CONFIG.HUNGER_MAX, npc.hunger + (this._getMealRestore() * amount));
+        }
+
+        EventLog.add('caution', npc.name + ' stole ' + amount + ' ' + npc._theftTargetType + '.', building.x, building.y);
+
+        Memory.add(npc, 'stole_resource', Memory.PRIORITY.CRIME,
+            npc.name + ' stole ' + amount + ' ' + npc._theftTargetType + ' from the ' + BUILDINGS[building.type].name + '.', [], true);
+
+        const witnesses = this._getNearbyWitnesses(building.x, building.y, CONFIG.THEFT_WITNESS_RANGE, [npc.id]);
+        if (witnesses.length > 0) {
+            Memory.add(npc, 'caught_stealing', Memory.PRIORITY.CRIME,
+                npc.name + ' was caught stealing ' + npc._theftTargetType + '.', witnesses.map(w => w.id), true);
+            for (const witness of witnesses) {
+                Memory.add(witness, 'theft_witnessed', Memory.PRIORITY.CRIME,
+                    witness.name + ' saw ' + npc.name + ' stealing ' + npc._theftTargetType + '.', [npc.id], true);
+                Relationship.change(witness, npc.id, -10);
+                Relationship.change(npc, witness.id, -4);
+            }
+        }
+
+        npc.state = this.STATE.IDLE;
+        npc.walkPurpose = '';
+        npc._theftTimer = 0;
+        npc._theftTargetBuildingId = null;
+        npc._theftTargetType = null;
+        npc._theftAmount = 0;
+    },
+
+    _updateDesperationTracker(npc) {
+        if ((npc.mood || 50) < 10) {
+            if (npc._desperateSinceDay === null || npc._desperateSinceDay === undefined) {
+                npc._desperateSinceDay = Time.day;
+            }
+        } else if ((npc.mood || 50) >= 20) {
+            npc._desperateSinceDay = null;
+        }
+    },
+
+    _shouldAttemptDesertion(npc) {
+        if ((npc.mood || 50) >= 10) return false;
+        if (npc._desperateSinceDay === null || npc._desperateSinceDay === undefined) return false;
+        if ((Time.day - npc._desperateSinceDay) < CONFIG.DESERTION_MIN_DESPERATE_DAYS) return false;
+        if (npc.state !== this.STATE.IDLE) return false;
+        if (World.tick - (npc._lastDesertionCheckTick || 0) < CONFIG.DESERTION_CHECK_INTERVAL) return false;
+
+        npc._lastDesertionCheckTick = World.tick;
+        const chance = Utils.clamp(
+            CONFIG.DESERTION_BASE_CHANCE + Personality.getModifier(npc, 'fleeChance') * 0.05,
+            0.01,
+            0.12
+        );
+        return Math.random() < chance;
+    },
+
+    _computeDesertionTarget(npc) {
+        const nx = Math.floor(npc.x);
+        const ny = Math.floor(npc.y);
+        const edgeTargets = [
+            { x: 1, y: ny },
+            { x: World.width - 2, y: ny },
+            { x: nx, y: 1 },
+            { x: nx, y: World.height - 2 }
+        ];
+        let bestEdge = edgeTargets[0];
+        let bestEdgeDist = Infinity;
+        for (const target of edgeTargets) {
+            const dist = Utils.manhattan(nx, ny, target.x, target.y);
+            if (dist < bestEdgeDist) {
+                bestEdgeDist = dist;
+                bestEdge = target;
+            }
+        }
+
+        if (!World.keepPos) return bestEdge;
+
+        const dx = Math.sign(nx - (World.keepPos.x + 1)) || (Math.random() < 0.5 ? -1 : 1);
+        const dy = Math.sign(ny - (World.keepPos.y + 1)) || (Math.random() < 0.5 ? -1 : 1);
+        const farPoint = {
+            x: Utils.clamp((World.keepPos.x + 1) + dx * CONFIG.DESERTION_DISTANCE_FROM_KEEP, 1, World.width - 2),
+            y: Utils.clamp((World.keepPos.y + 1) + dy * CONFIG.DESERTION_DISTANCE_FROM_KEEP, 1, World.height - 2)
+        };
+
+        const farPointDist = Utils.manhattan(nx, ny, farPoint.x, farPoint.y);
+        return farPointDist < bestEdgeDist ? farPoint : bestEdge;
+    },
+
+    _startDesertion(npc) {
+        const target = this._computeDesertionTarget(npc);
+        if (!target) return;
+
+        if (npc.assignedBuilding) {
+            const building = World.buildings.find(b => b.id === npc.assignedBuilding);
+            if (building) {
+                const workerIdx = building.workers.indexOf(npc.id);
+                if (workerIdx !== -1) building.workers.splice(workerIdx, 1);
+            }
+            npc.assignedBuilding = null;
+            npc.type = 'peasant';
+            npc.fg = '#ffffff';
+        }
+
+        npc._desertTarget = target;
+        npc._desertingSinceTick = World.tick;
+        npc.state = this.STATE.DESERTING;
+        npc.walkPurpose = 'deserting the settlement';
+        Animations.add(npc.x, npc.y, 'exclaim', null, { npcId: npc.id });
+        EventLog.add('warning', npc.name + ' is deserting the settlement.', npc.x, npc.y);
+
+        Memory.add(npc, 'deserted_settlement', Memory.PRIORITY.UPHEAVAL, npc.name + ' decided to abandon the settlement.', [], true);
+        Memory.addToWitnesses(npc.x, npc.y, 'saw_desertion', Memory.PRIORITY.UPHEAVAL,
+            npc.name + ' is leaving the settlement.', [npc.id], [npc.id]);
+
+        this._walkTo(npc, target.x, target.y, this.STATE.DESERTING, this.STATE.DESERTING);
+    },
+
+    _handleDeserting(npc) {
+        if (!npc._desertTarget) {
+            npc._desertTarget = this._computeDesertionTarget(npc);
+            if (!npc._desertTarget) return;
+            this._walkTo(npc, npc._desertTarget.x, npc._desertTarget.y, this.STATE.DESERTING, this.STATE.DESERTING);
+        }
+
+        if (npc.path && npc.path.length > 1) {
+            this._walkAlongPath(npc);
+        }
+
+        const nx = Math.floor(npc.x);
+        const ny = Math.floor(npc.y);
+        const nearEdge = nx <= 1 || ny <= 1 || nx >= World.width - 2 || ny >= World.height - 2;
+        const targetReached = npc._desertTarget && Utils.manhattan(nx, ny, npc._desertTarget.x, npc._desertTarget.y) <= 2;
+        const farFromKeep = World.keepPos
+            ? Utils.manhattan(nx, ny, World.keepPos.x + 1, World.keepPos.y + 1) >= CONFIG.DESERTION_DISTANCE_FROM_KEEP
+            : false;
+
+        if (nearEdge || targetReached || farFromKeep) {
+            this._removeNpcFromWorld(npc);
+        }
     },
 
     _idleBehavior(npc) {
@@ -699,7 +2145,7 @@ const NPC = {
 
         // Walk to building
         npc.walkPurpose = 'walking to ' + def.name;
-        this._walkTo(npc, bx, by, this.STATE.WALK_TO_WORK, this.STATE.WORKING);
+        this._walkTo(npc, bx, by, this.STATE.WALK_TO_WORK, this.STATE.WORKING, { ownBuildingId: building.id });
     },
 
     // ── Processor worker cycle ──
@@ -715,7 +2161,7 @@ const NPC = {
                 return;
             }
             npc.walkPurpose = 'carrying ' + def.consumes + ' to ' + def.name;
-            this._walkTo(npc, building.x, building.y, this.STATE.RETURN_TO_WORK, this.STATE.WORKING);
+            this._walkTo(npc, building.x, building.y, this.STATE.RETURN_TO_WORK, this.STATE.WORKING, { ownBuildingId: building.id });
             return;
         }
 
@@ -724,7 +2170,7 @@ const NPC = {
             // No input available, wait at building
             if (!this._isAtBuilding(npc, building)) {
                 npc.walkPurpose = 'walking to ' + def.name + ' (waiting for ' + def.consumes + ')';
-                this._walkTo(npc, building.x, building.y, this.STATE.WALK_TO_WORK, this.STATE.IDLE);
+                this._walkTo(npc, building.x, building.y, this.STATE.WALK_TO_WORK, this.STATE.IDLE, { ownBuildingId: building.id });
             }
             return;
         }
@@ -761,7 +2207,7 @@ const NPC = {
         // Fallback: stay at building
         if (!this._isAtBuilding(npc, building)) {
             npc.walkPurpose = 'returning to ' + def.name;
-            this._walkTo(npc, bx, by, this.STATE.WALK_TO_WORK, this.STATE.WORKING);
+            this._walkTo(npc, bx, by, this.STATE.WALK_TO_WORK, this.STATE.WORKING, { ownBuildingId: building.id });
         }
     },
 
@@ -777,7 +2223,7 @@ const NPC = {
             // No fires and no burning NPCs — idle at well
             if (!this._isAtBuilding(npc, building)) {
                 npc.walkPurpose = 'returning to well';
-                this._walkTo(npc, building.x, building.y, this.STATE.WALK_TO_WORK, this.STATE.IDLE);
+                this._walkTo(npc, building.x, building.y, this.STATE.WALK_TO_WORK, this.STATE.IDLE, { ownBuildingId: building.id });
             }
             npc.idleReason = 'no fires to fight';
             return;
@@ -814,7 +2260,7 @@ const NPC = {
         } else {
             // Walk to well
             npc.walkPurpose = 'walking to well for water';
-            this._walkTo(npc, building.x, building.y, this.STATE.FIRE_WALK_TO_WELL, this.STATE.FIRE_FILL_BUCKET);
+            this._walkTo(npc, building.x, building.y, this.STATE.FIRE_WALK_TO_WELL, this.STATE.FIRE_FILL_BUCKET, { ownBuildingId: building.id });
         }
     },
 
@@ -905,7 +2351,7 @@ const NPC = {
             // No disease — idle at apothecary
             if (!this._isAtBuilding(npc, building)) {
                 npc.walkPurpose = 'returning to apothecary';
-                this._walkTo(npc, building.x, building.y, this.STATE.WALK_TO_WORK, this.STATE.IDLE);
+                this._walkTo(npc, building.x, building.y, this.STATE.WALK_TO_WORK, this.STATE.IDLE, { ownBuildingId: building.id });
             }
             npc.idleReason = 'no disease to heal';
             return;
@@ -969,6 +2415,29 @@ const NPC = {
         }
     },
 
+    // Building-type to tool animation chars/color mapping
+    _WORK_TOOLS: {
+        woodcutter:  { chars: ['/', '\\', '/'], color: '#aa8855' },  // axe
+        quarry:      { chars: ['T', '|', 'T'], color: '#999999' },   // pickaxe
+        iron_mine:   { chars: ['T', '|', 'T'], color: '#aaaacc' },   // pickaxe
+        pitch_rig:   { chars: ['|', '/', '|'], color: '#665533' },   // drilling
+        farm:        { chars: ['J', '/', 'J'], color: '#88aa44' },   // sickle
+        wheat_farm:  { chars: ['J', '/', 'J'], color: '#ccaa33' },   // sickle
+        hops_farm:   { chars: ['J', '/', 'J'], color: '#66aa44' },   // sickle
+        orchard:     { chars: ['(', ')', '('], color: '#66aa66' },   // picking
+        windmill:    { chars: ['%', 'o', '%'], color: '#ccbb88' },   // grinding
+        bakery:      { chars: ['~', 'o', '~'], color: '#cc9944' },   // kneading
+        dairy:       { chars: ['u', 'U', 'u'], color: '#ccccaa' },   // churning
+        brewery:     { chars: ['u', 'U', 'u'], color: '#aa8833' },   // brewing
+        blacksmith:  { chars: ['T', '*', 'T'], color: '#ff8844' },   // hammer
+        fletcher:    { chars: ['-', '>', '-'], color: '#aa9966' },   // arrow crafting
+        poleturner:  { chars: ['|', '/', '|'], color: '#aa8855' },   // lathe
+        armorer:     { chars: ['T', 'O', 'T'], color: '#8888aa' },   // forging
+        inn:         { chars: ['u', 'U', 'u'], color: '#ccaa55' },   // serving
+        hunter:      { chars: ['-', '>', '-'], color: '#aa7744' },   // bow
+        apothecary:  { chars: ['o', '+', 'o'], color: '#44cc88' },   // mixing
+    },
+
     // Worker is in WORKING state at a building — handle production ticks
     _workingAtBuilding(npc) {
         if (!npc.assignedBuilding) {
@@ -986,10 +2455,18 @@ const NPC = {
 
         const def = BUILDINGS[building.type];
 
+        // Periodic tool animation while working
+        if (World.tick % 8 === 0) {
+            const toolDef = this._WORK_TOOLS[building.type];
+            if (toolDef) {
+                Animations.add(npc.x, npc.y, 'tool', 4, { npcId: npc.id, chars: toolDef.chars, color: toolDef.color });
+            }
+        }
+
         // Gatherer processing at hut (e.g., woodcutter processing logs into wood)
         if (def.gathers && def.processTicks && npc.carrying === def.gathers) {
             npc.walkPurpose = 'processing ' + npc.carrying + ' at ' + def.name;
-            building.production = (building.production || 0) + World.fearEfficiency;
+            building.production = (building.production || 0) + World.fearEfficiency * this._getFatigueEfficiency(npc);
 
             if (building.production >= def.processTicks) {
                 building.production = 0;
@@ -1012,6 +2489,11 @@ const NPC = {
             npc.walkPurpose = 'blessing the people';
             npc._blessTimer = (npc._blessTimer || 0) + 1;
 
+            // Music animation while blessing
+            if (npc._blessTimer === 1) {
+                Animations.add(npc.x, npc.y, 'music', 8, { npcId: npc.id });
+            }
+
             // Bless nearby civilian NPCs within 3 tiles
             const nx = Math.floor(npc.x), ny = Math.floor(npc.y);
             for (const n of World.npcs) {
@@ -1032,18 +2514,36 @@ const NPC = {
         }
 
         if (!def.produces) {
-            // Inn: consume ale over time, then fetch more
+            // Inn: serve ale to nearby visitors, then fetch more
             if (def.isInn && def.consumes && npc.carrying === def.consumes) {
-                npc.walkPurpose = 'serving ale';
-                building.production = (building.production || 0) + 1;
-                if (building.production >= def.consumeTicks) {
-                    building.production = 0;
-                    npc.carrying = null;
-                    npc.carryAmount = 0;
-                    building.aleServed = (building.aleServed || 0) + 1;
-                    // Go fetch more ale
-                    npc.idleReason = 'fetching ale';
-                    npc.state = this.STATE.IDLE;
+                // Find a non-worker NPC visitor near the inn
+                const innX = Math.floor(building.x), innY = Math.floor(building.y);
+                const customer = World.npcs.find(n => {
+                    if (n === npc || n.isBandit) return false;
+                    if (n.assignedBuilding === building.id) return false;
+                    if (n.type in TROOPS) return false;
+                    const dist = Math.abs(Math.floor(n.x) - innX) + Math.abs(Math.floor(n.y) - innY);
+                    return dist <= 3;
+                });
+
+                if (customer) {
+                    npc.walkPurpose = 'serving ale to ' + (customer.name || 'visitor');
+                    building.production = (building.production || 0) + 1;
+                    if (building.production >= def.consumeTicks) {
+                        building.production = 0;
+                        npc.carrying = null;
+                        npc.carryAmount = 0;
+                        building.aleServed = (building.aleServed || 0) + 1;
+                        // Customer benefits: mood bonus + memory
+                        customer.mood = Math.min(CONFIG.MOOD_MAX, (customer.mood || CONFIG.MOOD_DEFAULT) + 3);
+                        Memory.add(customer, 'drank_ale', Memory.PRIORITY.SOCIAL, customer.name + ' enjoyed ale at the inn.', [npc.id]);
+                        Animations.add(customer.x, customer.y, 'music', 8, { npcId: customer.id });
+                        // Go fetch more ale
+                        npc.idleReason = 'fetching ale';
+                        npc.state = this.STATE.IDLE;
+                    }
+                } else {
+                    npc.walkPurpose = 'waiting for customers';
                 }
                 return;
             }
@@ -1059,8 +2559,8 @@ const NPC = {
             return;
         }
 
-        // Tick production (scaled by fear factor efficiency)
-        building.production = (building.production || 0) + World.fearEfficiency;
+        // Tick production (scaled by fear factor and fatigue efficiency)
+        building.production = (building.production || 0) + World.fearEfficiency * this._getFatigueEfficiency(npc);
 
         if (building.production >= def.produceTicks) {
             building.production = 0;
@@ -1074,6 +2574,9 @@ const NPC = {
             // Worker picks up the product
             npc.carrying = def.produces;
             npc.carryAmount = def.produceAmount || 1;
+
+            // Production sparkle animation
+            Animations.add(npc.x, npc.y, 'sparkle', null, { npcId: npc.id });
 
             // Determine storage destination
             const storage = this._findStorageFor(def.produces, Math.floor(npc.x), Math.floor(npc.y));
@@ -1096,6 +2599,7 @@ const NPC = {
 
         // If carrying meat, deliver to granary
         if (npc.carrying === 'meat') {
+            this._releaseAnimalReservation(npc);
             const storage = this._findStorageFor('meat', nx, ny);
             if (storage) {
                 npc.walkPurpose = 'delivering meat to granary';
@@ -1108,6 +2612,7 @@ const NPC = {
 
         // If carrying carcass, go to building to butcher
         if (npc.carrying === 'carcass') {
+            this._releaseAnimalReservation(npc);
             if (this._isAtBuilding(npc, building)) {
                 npc.state = this.STATE.HUNT_BUTCHER;
                 npc.workTimer = 0;
@@ -1115,7 +2620,7 @@ const NPC = {
                 return;
             }
             npc.walkPurpose = 'carrying carcass to ' + def.name;
-            this._walkTo(npc, building.x, building.y, this.STATE.HUNT_CARRY_CARCASS, this.STATE.HUNT_BUTCHER);
+            this._walkTo(npc, building.x, building.y, this.STATE.HUNT_CARRY_CARCASS, this.STATE.HUNT_BUTCHER, { ownBuildingId: building.id });
             npc.workTimer = 0;
             return;
         }
@@ -1123,6 +2628,7 @@ const NPC = {
         // Check for existing carcasses to pick up
         const carcass = Animal.findNearestCarcass(nx, ny);
         if (carcass) {
+            this._releaseAnimalReservation(npc);
             npc._huntTarget = null;
             npc._carcassTarget = carcass.id;
             npc.walkPurpose = 'walking to carcass';
@@ -1131,13 +2637,17 @@ const NPC = {
         }
 
         // Find a passive animal to hunt
-        const prey = Animal.findNearestAnimal(def.hunts || 'any_passive', nx, ny);
+        const prey = Animal.findNearestAnimal(def.hunts || 'any_passive', nx, ny, a => {
+            return !this._isAnimalReservedByOther(a.id, npc.id);
+        });
         if (!prey) {
+            this._releaseAnimalReservation(npc);
             npc.idleReason = 'no game to hunt';
             return;
         }
 
         npc._huntTarget = prey.id;
+        this._reserveAnimal(npc, prey.id);
         const preyName = (Animal.TYPES[prey.type] && Animal.TYPES[prey.type].name) || prey.type;
         npc.walkPurpose = 'tracking ' + preyName;
         // Walk toward the deer (will re-evaluate when close enough)
@@ -1155,6 +2665,7 @@ const NPC = {
         const prey = Animal._animals.find(a => a.id === npc._huntTarget && !a.dead);
         if (!prey) {
             // Target gone, go back to idle to find new one
+            this._releaseAnimalReservation(npc);
             npc._huntTarget = null;
             npc.state = this.STATE.IDLE;
             return;
@@ -1169,6 +2680,7 @@ const NPC = {
             const killed = Animal.damageAnimal(prey.id, prey.hp); // instant kill for simplicity
             if (killed) {
                 // Deer is dead, go pick up carcass
+                this._releaseAnimalReservation(npc);
                 npc._huntTarget = null;
                 const carcass = Animal._carcasses.find(c => c.id === prey.id);
                 if (carcass) {
@@ -1218,6 +2730,7 @@ const NPC = {
         // Pick up the carcass at current position
         const carcass = Animal.removeCarcass(npc._carcassTarget);
         if (carcass) {
+            this._releaseAnimalReservation(npc);
             npc.carrying = 'carcass';
             npc.carryAmount = 1;
             npc._carcassTarget = null;
@@ -1225,6 +2738,7 @@ const NPC = {
             npc.state = this.STATE.IDLE; // will trigger _startHunterCycle which handles carrying carcass
         } else {
             // Carcass already picked up by someone else
+            this._releaseAnimalReservation(npc);
             npc._carcassTarget = null;
             npc.state = this.STATE.IDLE;
         }
@@ -1238,11 +2752,6 @@ const NPC = {
                 if (nx === building.x + dx && ny === building.y + dy) return true;
             }
         }
-        // Also check adjacent tiles (for non-walkable buildings)
-        const neighbors = Utils.getNeighbors4(building.x, building.y);
-        for (const n of neighbors) {
-            if (nx === n.x && ny === n.y) return true;
-        }
         return false;
     },
 
@@ -1250,6 +2759,33 @@ const NPC = {
         // Find nearest resource tile of the right type
         const terrainType = TERRAIN_BY_ID[def.gathersFrom];
         if (!terrainType) return;
+
+        // Tree gatherers reserve a specific tree and choose a reachable adjacent tile
+        if (def.gathersFrom === 'tree') {
+            const nx = Math.floor(npc.x), ny = Math.floor(npc.y);
+            const walkSpot = Pathfinding.findNearest(nx, ny, (x, y) => {
+                if (!World.isWalkable(x, y)) return false;
+                return !!this._findReservableAdjacentResourceTile(x, y, def, npc);
+            }, undefined);
+
+            if (!walkSpot) {
+                npc.idleReason = 'no reachable tree source';
+                return;
+            }
+
+            const targetTree = this._findReservableAdjacentResourceTile(walkSpot.x, walkSpot.y, def, npc);
+            if (!targetTree) {
+                npc.idleReason = 'tree source already reserved';
+                return;
+            }
+
+            this._reserveTree(npc, targetTree.x, targetTree.y);
+            npc._gatherTarget = targetTree;
+            npc._gatherType = def.gathers;
+            npc.walkPurpose = 'walking to ' + def.gathers + ' source';
+            this._walkTo(npc, walkSpot.x, walkSpot.y, this.STATE.WALK_TO_RESOURCE, this.STATE.GATHER_RESOURCE);
+            return;
+        }
 
         // For deposit buildings (placeOnDeposit), restrict gathering to own building footprint
         if (def.placeOnDeposit) {
@@ -1313,6 +2849,24 @@ const NPC = {
         this._walkTo(npc, adjacent.x, adjacent.y, this.STATE.WALK_TO_RESOURCE, this.STATE.GATHER_RESOURCE);
     },
 
+    _findReservableAdjacentResourceTile(x, y, def, npc) {
+        const candidates = Utils.getNeighbors4(x, y);
+        candidates.push({ x, y });
+
+        for (const p of candidates) {
+            const tile = World.getTile(p.x, p.y);
+            if (!tile || tile.resourceAmount <= 0) continue;
+            const isMatch = def.gathersFrom === 'tree'
+                ? tile.terrain.isTree === true
+                : tile.terrain.id === def.gathersFrom;
+            if (!isMatch) continue;
+            if (def.gathersFrom === 'tree' && this._isTreeReservedByOther(p.x, p.y, npc.id)) continue;
+            return { x: p.x, y: p.y };
+        }
+
+        return null;
+    },
+
     _findAdjacentWalkable(x, y) {
         const neighbors = Utils.getNeighbors4(x, y);
         for (const n of neighbors) {
@@ -1329,6 +2883,18 @@ const NPC = {
     _gatherResource(npc) {
         npc.walkPurpose = 'gathering ' + (npc._gatherType || 'resource');
         npc.gatherTimer++;
+
+        // Tool animation while gathering
+        if (npc.gatherTimer % 8 === 0 && npc.assignedBuilding) {
+            const building = World.buildings.find(b => b.id === npc.assignedBuilding);
+            if (building) {
+                const toolDef = this._WORK_TOOLS[building.type];
+                if (toolDef) {
+                    Animations.add(npc.x, npc.y, 'tool', 4, { npcId: npc.id, chars: toolDef.chars, color: toolDef.color });
+                }
+            }
+        }
+
         if (npc.gatherTimer >= CONFIG.GATHER_TICKS) {
             npc.gatherTimer = 0;
 
@@ -1340,6 +2906,7 @@ const NPC = {
                     tile.resourceAmount--;
                     npc.carrying = npc._gatherType;
                     npc.carryAmount = 1;
+                    if (npc._reservedTreeKey) this._releaseTreeReservation(npc);
 
                     // If tree is depleted, convert to base terrain type
                     if (tile.resourceAmount <= 0 && tile.terrain.isTree) {
@@ -1360,9 +2927,8 @@ const NPC = {
                     if (building && def && def.processTicks) {
                         // Return to hut to process raw material
                         npc.walkPurpose = 'carrying raw ' + npc.carrying + ' to ' + def.name;
-                        const walkOpts = def.placeOnDeposit ? { ownBuildingId: building.id } : {};
                         this._walkTo(npc, building.x, building.y,
-                            this.STATE.RETURN_TO_WORK, this.STATE.WORKING, walkOpts);
+                            this.STATE.RETURN_TO_WORK, this.STATE.WORKING, { ownBuildingId: building.id });
                     } else {
                         // Walk directly to stockpile
                         const stockpile = Resources.findNearestStockpile(
@@ -1378,10 +2944,12 @@ const NPC = {
                         }
                     }
                 } else {
+                    if (npc._reservedTreeKey) this._releaseTreeReservation(npc);
                     npc.idleReason = 'resource depleted';
                     npc.state = this.STATE.IDLE;
                 }
             } else {
+                if (npc._reservedTreeKey) this._releaseTreeReservation(npc);
                 npc.idleReason = 'no gather target';
                 npc.state = this.STATE.IDLE;
             }
@@ -1389,6 +2957,8 @@ const NPC = {
     },
 
     _depositResource(npc) {
+        this._releaseTreeReservation(npc);
+        this._releaseAnimalReservation(npc);
         if (npc.carrying) {
             npc.walkPurpose = 'depositing ' + npc.carrying;
             Resources.add(npc.carrying, npc.carryAmount);
@@ -1412,7 +2982,7 @@ const NPC = {
             // Walk back to assigned building
             const building = World.buildings.find(b => b.id === npc.assignedBuilding);
             if (building) {
-                this._walkTo(npc, building.x, building.y, this.STATE.RETURN_TO_WORK, this.STATE.WORKING);
+                this._walkTo(npc, building.x, building.y, this.STATE.RETURN_TO_WORK, this.STATE.WORKING, { ownBuildingId: building.id });
             } else {
                 npc.idleReason = 'building destroyed';
                 npc.state = this.STATE.IDLE;
@@ -1478,7 +3048,8 @@ const NPC = {
         // Speed boost from road level at current tile
         const tile = World.getTile(Math.floor(npc.x), Math.floor(npc.y));
         const roadBonus = tile ? tile.roadLevel * 0.02 : 0; // +2% speed per road level (max +30% at level 15)
-        npc.moveProgress += CONFIG.WORKER_SPEED + roadBonus;
+        const troopBonus = (TROOPS[npc.type] && !npc.isBandit) ? CONFIG.TROOP_SPEED_BONUS : 0;
+        npc.moveProgress += CONFIG.WORKER_SPEED + roadBonus + troopBonus;
 
         if (npc.moveProgress >= 1) {
             npc.x = target.x;
@@ -1487,8 +3058,9 @@ const NPC = {
             npc.moveProgress = 0;
 
             // Stamp road on the tile we just arrived at (every 2nd arrival)
+            // Bandits and troops don't create roads
             const arrivedTile = World.getTile(target.x, target.y);
-            if (arrivedTile && arrivedTile.terrain.walkable) {
+            if (arrivedTile && arrivedTile.terrain.walkable && !npc.isBandit && !(npc.type in TROOPS)) {
                 arrivedTile._roadStampCount = (arrivedTile._roadStampCount || 0) + 1;
                 if (arrivedTile._roadStampCount >= 2) {
                     arrivedTile._roadStampCount = 0;
@@ -1533,6 +3105,8 @@ const NPC = {
             if (peasant) {
                 peasant.assignedBuilding = building.id;
                 peasant.type = 'worker';
+                Memory.add(peasant, 'assigned_work', Memory.PRIORITY.ROUTINE, peasant.name + ' was assigned to the ' + def.name + '.', [], true);
+                EventLog.add('info', peasant.name + ' was assigned to ' + def.name + '.', building.x, building.y);
                 // Color worker based on their workplace building
                 const bDef = BUILDINGS[building.type];
                 peasant.fg = bDef ? bDef.fg : '#aaaaff';
@@ -1552,6 +3126,8 @@ const NPC = {
     releaseWorker(npcId) {
         const npc = World.npcs.find(n => n.id === npcId);
         if (!npc) return;
+        this._releaseTreeReservation(npc);
+        this._releaseAnimalReservation(npc);
         npc.assignedBuilding = null;
         npc.type = 'peasant';
         npc.fg = '#ffffff';
@@ -1563,6 +3139,13 @@ const NPC = {
         npc.walkPurpose = '';
         npc.walkFrom = null;
         npc.walkTo = null;
+        npc._fightTargetId = null;
+        npc._fightUntil = 0;
+        npc._fightId = 0;
+        npc._theftTargetBuildingId = null;
+        npc._theftTargetType = null;
+        npc._theftAmount = 0;
+        npc._theftTimer = 0;
         // Reset to civilian stats
         npc.hp = this.CIVILIAN_HP;
         npc.maxHp = this.CIVILIAN_HP;

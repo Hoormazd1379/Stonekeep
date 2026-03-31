@@ -147,6 +147,9 @@ const Renderer = {
         // Render NPCs
         this._renderNPCs(ctx, fontSize, tw, th);
 
+        // Render overlay animations (above NPCs, below UI)
+        this._renderAnimations(ctx, fontSize, tw, th);
+
         // Render animals
         this._renderAnimals(ctx, fontSize, tw, th);
 
@@ -209,15 +212,11 @@ const Renderer = {
             }
             ctx.fillText(npc.char || '@', screenX + tw / 2, screenY + th / 2);
 
-            // Combat indicator — flash crossed swords when NPC recently attacked
-            if (npc._attackCooldown > 0 || npc._buildingAttackCooldown > 0) {
-                const combatChars = ['x', '+', 'x'];
-                const ci = (World.tick + Math.floor(npc.x * 3)) % 3;
-                ctx.fillStyle = World.tick % 2 === 0 ? '#FF4444' : '#FF8800';
-                ctx.font = `bold ${Math.round(fontSize * 0.6)}px ${CONFIG.FONT_FAMILY}`;
-                ctx.fillText(combatChars[ci], screenX + tw - 2, screenY + 4);
-                ctx.font = `bold ${fontSize}px ${CONFIG.FONT_FAMILY}`;
-            }
+            // Combat indicator — now handled by Animations system
+
+            // Sleep indicator — now handled by Animations system
+
+            // Social indicator — now handled by Animations system
         }
 
         // Health bars for NPCs in combat or damaged
@@ -247,6 +246,71 @@ const Renderer = {
             ctx.fillStyle = barColor;
             ctx.fillRect(barX, barY, barW * hpPct, barH);
         }
+    },
+
+    _renderAnimations(ctx, fontSize, tw, th) {
+        const anims = Animations.getActive();
+        if (anims.length === 0) return;
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        for (const a of anims) {
+            const tileX = Math.floor(a.x);
+            const tileY = Math.floor(a.y);
+
+            // Respect fog of war — only render on currently visible tiles
+            const tile = World.tiles[tileY] && World.tiles[tileY][tileX];
+            if (!tile || tile.lastSeenTick !== World.tick) continue;
+
+            const def = Animations.TYPES[a.type];
+            if (!def) continue;
+
+            const elapsed = World.tick - a.startTick;
+            const chars = a.chars || def.chars;
+            const charIdx = (World.tick + Math.floor(a.x * 7)) % chars.length;
+            const ch = chars[charIdx];
+
+            // Compute screen position with offset
+            let screenX = (a.x * this.tileW - Camera.x) * Camera.zoom + tw * def.offsetX;
+            let screenY = (a.y * this.tileH - Camera.y) * Camera.zoom + th * def.offsetY;
+
+            // Float upward effect
+            if (def.float) {
+                screenY -= (elapsed % 8) * 0.4 * Camera.zoom;
+            }
+
+            // Culling
+            if (screenX < -tw || screenX > this.width + tw) continue;
+            if (screenY < -th || screenY > this.height + th) continue;
+
+            // Compute alpha for fade effect
+            let alpha = 1.0;
+            if (def.fade && a.duration > 0) {
+                const progress = elapsed / a.duration;
+                // Fade out in the last 40% of duration
+                if (progress > 0.6) {
+                    alpha = 1.0 - ((progress - 0.6) / 0.4);
+                    if (alpha < 0) alpha = 0;
+                }
+            }
+
+            // Color (alt color flicker for combat type)
+            let color = a.color || def.color;
+            if (def.altColor && World.tick % 2 === 0) {
+                color = def.altColor;
+            }
+
+            const fSize = Math.max(6, Math.round(fontSize * def.fontScale));
+            ctx.font = `bold ${fSize}px ${CONFIG.FONT_FAMILY}`;
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = color;
+            ctx.fillText(ch, screenX, screenY);
+            ctx.globalAlpha = 1.0;
+        }
+
+        // Restore font
+        ctx.font = `bold ${fontSize}px ${CONFIG.FONT_FAMILY}`;
     },
 
     _renderAnimals(ctx, fontSize, tw, th) {

@@ -162,17 +162,46 @@ const Fire = {
         let spread = 0;
         for (const target of neighbors) {
             if (spread >= maxSpread) break;
-            if (this.ignite(target.x, target.y)) spread++;
+            if (this.ignite(target.x, target.y)) {
+                Animations.add(target.x, target.y, 'ember');
+                spread++;
+            }
         }
     },
 
     _destroyBuilding(building) {
         const def = BUILDINGS[building.type];
 
+        // Camera shake on building destruction
+        if (typeof Camera.shake === 'function') Camera.shake(4, 12);
+
+        // Memory: witnesses remember building destruction
+        Memory.addToWitnesses(building.x, building.y, 'building_destroyed', Memory.PRIORITY.FIRE, 'The ' + def.name + ' was destroyed.', []);
+        EventLog.add('danger', def.name + ' was destroyed.', building.x, building.y);
+
         // Release workers before destroying
         if (building.workers) {
             for (const wid of [...building.workers]) {
                 NPC.releaseWorker(wid);
+            }
+        }
+
+        // Granary/Stockpile destruction: lose 50% of stored resources
+        if (building.type === 'granary') {
+            for (const res of STORAGE_TYPES.granary) {
+                const current = Resources.get(res);
+                if (current > 0) {
+                    const loss = Math.floor(current * 0.5);
+                    Resources.remove(res, loss);
+                }
+            }
+        } else if (building.type === 'stockpile') {
+            for (const res of STORAGE_TYPES.stockpile) {
+                const current = Resources.get(res);
+                if (current > 0) {
+                    const loss = Math.floor(current * 0.5);
+                    Resources.remove(res, loss);
+                }
             }
         }
 
@@ -182,6 +211,7 @@ const Fire = {
         }
 
         World.removeBuilding(building.id);
+        NPC.reassignAllHomes();
     },
 
     // Check if NPC is a well worker (immune to fire)
@@ -203,6 +233,9 @@ const Fire = {
             if (Math.random() < CONFIG.NPC_FIRE_CATCH_CHANCE) {
                 npc.onFire = true;
                 npc._fireTick = World.tick;
+                if (npc.memories) {
+                    Memory.add(npc, 'caught_fire', Memory.PRIORITY.FIRE, npc.name + ' caught fire!', [], true);
+                }
             }
         }
     },
@@ -214,7 +247,7 @@ const Fire = {
 
             // Periodic fire damage
             if (World.tick % CONFIG.NPC_FIRE_DAMAGE_INTERVAL === 0) {
-                NPC.damageNpc(npc.id, CONFIG.NPC_FIRE_DAMAGE);
+                NPC.damageNpc(npc.id, CONFIG.NPC_FIRE_DAMAGE, 'fire');
             }
 
             // Burning NPC runs erratically — override walk target

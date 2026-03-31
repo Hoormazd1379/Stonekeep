@@ -10,10 +10,15 @@ const Events = {
     diseaseMap: null,    // 2D boolean array for O(1) lookup
 
     init() {
-        this._nextEventTick = CONFIG.EVENT_GRACE_PERIOD;
+        this._nextEventTick = Math.max(CONFIG.EVENT_GRACE_PERIOD, this._getNegativeEventSafeUntilTick());
         this._notifications = [];
         this.diseaseClouds = [];
         this.diseaseMap = {};
+        this._raidActive = false;
+    },
+
+    _getNegativeEventSafeUntilTick() {
+        return CONFIG.EVENT_SAFE_DAYS * 24 * CONFIG.TICKS_PER_HOUR;
     },
 
     _isDiseased(x, y) {
@@ -30,6 +35,9 @@ const Events = {
             this._triggerRandomEvent();
             this._scheduleNextEvent();
         }
+
+        // Check if an active bandit raid has ended (all bandits dead)
+        this._checkRaidEnd();
 
         // Update disease clouds — expire old clouds, infect NPCs
         this._updateDisease();
@@ -65,6 +73,8 @@ const Events = {
     },
 
     _triggerRandomEvent() {
+        if (World.tick < this._getNegativeEventSafeUntilTick()) return;
+
         const types = [];
 
         // Fire event: requires flammable buildings not already on fire
@@ -106,7 +116,12 @@ const Events = {
         const target = flammable[Math.floor(Math.random() * flammable.length)];
         const ignited = Fire.ignite(target.x, target.y);
         if (ignited) {
+            Animations.add(target.x, target.y, 'flash', 10, { color: '#FF6600' });
             this.notify('A fire has broken out at the ' + BUILDINGS[target.type].name + '!', '#FF6600');
+            EventLog.add('warning', 'Fire broke out at ' + BUILDINGS[target.type].name + '.', target.x, target.y);
+            // Memory: all nearby NPCs witness the fire
+            Memory.addToWitnesses(target.x, target.y, 'fire_broke_out', Memory.PRIORITY.FIRE,
+                'A fire broke out at the ' + BUILDINGS[target.type].name + '.', []);
         }
     },
 
@@ -133,7 +148,33 @@ const Events = {
         }
 
         if (spawned > 0) {
+            this._raidActive = true;
+            Animations.add(spawn.x, spawn.y, 'flash', 12, { color: '#FF0000' });
+            if (spawned >= 5 && typeof Camera.shake === 'function') Camera.shake(6, 16);
             this.notify('Bandits are raiding your settlement!', '#FF0000');
+            EventLog.add('danger', 'Bandit raid started (' + spawned + ' bandits).', spawn.x, spawn.y);
+            // Memory: all nearby NPCs witness the raid
+            Memory.addToWitnesses(spawn.x, spawn.y, 'bandit_raid', Memory.PRIORITY.COMBAT,
+                spawned + ' bandits are raiding the settlement!', []);
+        }
+    },
+
+    _checkRaidEnd() {
+        if (!this._raidActive) return;
+        // Only check periodically
+        if (World.tick % 16 !== 0) return;
+        const banditsAlive = World.npcs.some(n => n.isBandit);
+        if (!banditsAlive) {
+            this._raidActive = false;
+            this.notify('The bandit attack has been repelled!', '#44DD44');
+            EventLog.add('positive', 'Bandit attack successfully repelled! The settlement is safe.', null, null);
+            // Give all civilians a "survived bandit attack" memory + mood bonus
+            for (const npc of World.npcs) {
+                if (npc.isBandit || npc.type in TROOPS) continue;
+                Memory.add(npc, 'survived_raid', Memory.PRIORITY.COMBAT,
+                    npc.name + ' survived a bandit attack.', [], false);
+                npc.mood = Math.min(100, (npc.mood || 50) + 5);
+            }
         }
     },
 
@@ -246,7 +287,12 @@ const Events = {
         }
 
         if (placed > 0) {
+            Animations.add(spawn.x, spawn.y, 'flash', 10, { color: '#88CC00' });
             this.notify('A plague has broken out near your settlement!', '#88CC00');
+            EventLog.add('warning', 'Disease outbreak detected near the settlement.', spawn.x, spawn.y);
+            // Memory: NPCs near the disease zone witness it
+            Memory.addToWitnesses(spawn.x, spawn.y, 'got_sick', Memory.PRIORITY.DISEASE,
+                'A plague cloud appeared near the settlement.', []);
         }
     },
 
@@ -276,6 +322,7 @@ const Events = {
 
         this.diseaseClouds.push({ x: x, y: y, startTick: World.tick });
         this._setDisease(x, y, true);
+        Animations.add(x, y, 'miasma');
         return true;
     },
 
@@ -340,6 +387,8 @@ const Events = {
                 if (!npc.diseased) {
                     npc.diseased = true;
                     npc._diseaseStartTick = World.tick;
+                    Animations.add(npc.x, npc.y, 'disease', null, { npcId: npc.id });
+                    Memory.add(npc, 'got_sick', Memory.PRIORITY.DISEASE, npc.name + ' contracted a disease.', [], true);
                 }
             }
         }
@@ -357,6 +406,7 @@ const Events = {
                     if (Math.random() < spreadChance) {
                         other.diseased = true;
                         other._diseaseStartTick = World.tick;
+                        Animations.add(other.x, other.y, 'disease', null, { npcId: other.id });
                     }
                 }
             }
@@ -366,7 +416,7 @@ const Events = {
         if (World.tick % CONFIG.DISEASE_DAMAGE_INTERVAL === 0) {
             for (const npc of World.npcs) {
                 if (npc.diseased && !npc.isBandit) {
-                    NPC.damageNpc(npc.id, CONFIG.DISEASE_DAMAGE);
+                    NPC.damageNpc(npc.id, CONFIG.DISEASE_DAMAGE, 'disease');
                 }
             }
         }
@@ -385,6 +435,7 @@ const Events = {
                     npc.diseased = false;
                     npc._diseaseRecovery = 0;
                     npc._diseaseStartTick = undefined;
+                    Memory.add(npc, 'recovered', Memory.PRIORITY.NOTABLE_WORK, npc.name + ' recovered from disease.', [], true);
                 }
             }
         }

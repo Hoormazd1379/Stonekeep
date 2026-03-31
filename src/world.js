@@ -31,6 +31,7 @@ const World = {
     stockpilePos: null,
     rationLevel: 'Normal',
     selectedUnits: [],
+    autoTrade: {},  // { resourceId: { min: number, max: number } }
 
     init(width, height, seed) {
         this.width = width;
@@ -47,6 +48,7 @@ const World = {
         this.stockpilePos = null;
         this.rationLevel = 'Normal';
         this.selectedUnits = [];
+        this.autoTrade = {};
         this.generatedChunks = new Set();
 
         // Sparse tile grid — rows/tiles created on demand
