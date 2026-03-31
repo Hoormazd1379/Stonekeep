@@ -388,7 +388,9 @@ const SaveLoad = {
             // Hauler / forward storage
             _haulerDeliverTo: n._haulerDeliverTo || null,
             _pickupType: n._pickupType || null,
-            _eatingAtBuildingId: n._eatingAtBuildingId || null
+            _eatingAtBuildingId: n._eatingAtBuildingId || null,
+            _depositBuildingId: n._depositBuildingId || null,
+            _pickupBuildingId: n._pickupBuildingId || null
         };
 
         // Troop-specific
@@ -741,7 +743,9 @@ const SaveLoad = {
             // Hauler / forward storage
             _haulerDeliverTo: n._haulerDeliverTo || null,
             _pickupType: n._pickupType || null,
-            _eatingAtBuildingId: n._eatingAtBuildingId || null
+            _eatingAtBuildingId: n._eatingAtBuildingId || null,
+            _depositBuildingId: n._depositBuildingId || null,
+            _pickupBuildingId: n._pickupBuildingId || null
         };
 
         // Troop-specific

@@ -839,7 +839,7 @@ const NPC = {
         // Auto-eat from nearest granary (main or forward) every TROOP_HUNGER_INTERVAL ticks
         if (npc.hunger < CONFIG.HUNGER_EAT_THRESHOLD && World.tick % CONFIG.TROOP_HUNGER_INTERVAL === 0) {
             for (let i = 0; i < 2; i++) {
-                const food = this._chooseFoodToEat(npc);
+                let food = this._chooseFoodToEat(npc);
                 if (food) {
                     // Try forward granary near troop first, then main storage
                     const nx = Math.floor(npc.x), ny = Math.floor(npc.y);
@@ -847,9 +847,23 @@ const NPC = {
                     let consumed = false;
                     if (nearGranary && nearGranary.buildingId) {
                         const bld = World.buildings.find(b => b.id === nearGranary.buildingId);
-                        if (bld && bld.storage && (bld.storage[food] || 0) > 0) {
-                            Resources.removeFromBuilding(nearGranary.buildingId, food, 1);
-                            consumed = true;
+                        const isForwardGranary = bld && BUILDINGS[bld.type] && BUILDINGS[bld.type].isForwardStorage;
+                        if (isForwardGranary && bld.storage) {
+                            if ((bld.storage[food] || 0) > 0) {
+                                Resources.removeFromBuilding(nearGranary.buildingId, food, 1);
+                                consumed = true;
+                            } else {
+                                // Preferred food not in forward granary; try any available
+                                const troopFoodTypes = ['apples', 'bread', 'cheese', 'meat'];
+                                for (const f of troopFoodTypes) {
+                                    if ((bld.storage[f] || 0) > 0) {
+                                        Resources.removeFromBuilding(nearGranary.buildingId, f, 1);
+                                        food = f;
+                                        consumed = true;
+                                        break;
+                                    }
+                                }
+                            }
                         }
                     }
                     if (!consumed) {
@@ -1371,11 +1385,22 @@ const NPC = {
             const eatBuilding = npc._eatingAtBuildingId ? World.buildings.find(b => b.id === npc._eatingAtBuildingId) : null;
             const isForward = eatBuilding && BUILDINGS[eatBuilding.type] && BUILDINGS[eatBuilding.type].isForwardStorage;
             for (let i = 0; i < unitsToEat; i++) {
-                const foodType = npc._eatingFoodType || this._chooseFoodToEat(npc);
+                let foodType = npc._eatingFoodType || this._chooseFoodToEat(npc);
                 if (!foodType) break;
                 let consumed = false;
                 if (isForward) {
                     consumed = Resources.removeFromBuilding(eatBuilding.id, foodType, 1);
+                    // If preferred type not in this forward granary, try any food it has
+                    if (!consumed) {
+                        const fwdFoodTypes = ['apples', 'bread', 'cheese', 'meat'];
+                        for (const f of fwdFoodTypes) {
+                            if (Resources.removeFromBuilding(eatBuilding.id, f, 1)) {
+                                foodType = f;
+                                consumed = true;
+                                break;
+                            }
+                        }
+                    }
                 }
                 if (!consumed && Resources.get(foodType) > 0) {
                     consumed = Resources.remove(foodType, 1);
@@ -2238,6 +2263,7 @@ const NPC = {
         if (!storage) return;
 
         npc._pickupType = def.consumes;
+        npc._pickupBuildingId = storage.buildingId;
         npc.walkPurpose = 'fetching ' + def.consumes + ' from storage';
         this._walkTo(npc, storage.x, storage.y, this.STATE.WALK_TO_PICKUP, this.STATE.PICKUP_RESOURCE);
     },
@@ -2272,6 +2298,7 @@ const NPC = {
                     const mainBuildings = World.getBuildingsOfType(def.forwardOf);
                     const mainTile = this._findNearestBuildingTileFrom(mainBuildings, nx, ny);
                     if (mainTile) {
+                        npc._depositBuildingId = mainTile.buildingId;
                         npc.walkPurpose = 'hauling ' + npc.carrying + ' to main ' + def.forwardOf;
                         this._walkTo(npc, mainTile.x, mainTile.y, this.STATE.DELIVER_RESOURCE, this.STATE.DEPOSIT_RESOURCE);
                         return;
@@ -2311,6 +2338,7 @@ const NPC = {
                     const mainGranaries = World.getBuildingsOfType('granary');
                     const mainTile = this._findNearestBuildingTileFrom(mainGranaries, nx, ny);
                     if (mainTile) {
+                        npc._pickupBuildingId = mainTile.buildingId;
                         npc.walkPurpose = 'fetching ' + food + ' from main granary';
                         this._walkTo(npc, mainTile.x, mainTile.y, this.STATE.WALK_TO_PICKUP, this.STATE.PICKUP_RESOURCE);
                         return;
@@ -2325,6 +2353,7 @@ const NPC = {
                         const mainGranaries = World.getBuildingsOfType('granary');
                         const mainTile = this._findNearestBuildingTileFrom(mainGranaries, nx, ny);
                         if (mainTile) {
+                            npc._depositBuildingId = mainTile.buildingId;
                             npc.walkPurpose = 'hauling ' + food + ' to main granary';
                             this._walkTo(npc, mainTile.x, mainTile.y, this.STATE.DELIVER_RESOURCE, this.STATE.DEPOSIT_RESOURCE);
                             return;
@@ -2346,6 +2375,7 @@ const NPC = {
                     const mainStockpiles = World.getBuildingsOfType('stockpile');
                     const mainTile = this._findNearestBuildingTileFrom(mainStockpiles, nx, ny);
                     if (mainTile) {
+                        npc._pickupBuildingId = mainTile.buildingId;
                         npc.walkPurpose = 'fetching ' + res + ' from main stockpile';
                         this._walkTo(npc, mainTile.x, mainTile.y, this.STATE.WALK_TO_PICKUP, this.STATE.PICKUP_RESOURCE);
                         return;
@@ -2360,6 +2390,7 @@ const NPC = {
                         const mainStockpiles = World.getBuildingsOfType('stockpile');
                         const mainTile = this._findNearestBuildingTileFrom(mainStockpiles, nx, ny);
                         if (mainTile) {
+                            npc._depositBuildingId = mainTile.buildingId;
                             npc.walkPurpose = 'hauling ' + res + ' to main stockpile';
                             this._walkTo(npc, mainTile.x, mainTile.y, this.STATE.DELIVER_RESOURCE, this.STATE.DEPOSIT_RESOURCE);
                             return;
@@ -2701,6 +2732,7 @@ const NPC = {
                 // Deliver processed resource to stockpile
                 const storage = this._findStorageFor(npc.carrying, Math.floor(npc.x), Math.floor(npc.y));
                 if (storage) {
+                    npc._depositBuildingId = storage.buildingId;
                     npc.walkPurpose = 'delivering ' + npc.carrying + ' to stockpile';
                     this._walkTo(npc, storage.x, storage.y,
                         this.STATE.DELIVER_RESOURCE, this.STATE.DEPOSIT_RESOURCE);
@@ -2819,6 +2851,7 @@ const NPC = {
             const storage = this._findStorageFor(def.produces, Math.floor(npc.x), Math.floor(npc.y));
 
             if (storage) {
+                npc._depositBuildingId = storage.buildingId;
                 npc.walkPurpose = 'delivering ' + def.produces + ' to storage';
                 this._walkTo(npc, storage.x, storage.y, this.STATE.DELIVER_RESOURCE, this.STATE.DEPOSIT_RESOURCE);
             } else {
@@ -2839,6 +2872,7 @@ const NPC = {
             this._releaseAnimalReservation(npc);
             const storage = this._findStorageFor('meat', nx, ny);
             if (storage) {
+                npc._depositBuildingId = storage.buildingId;
                 npc.walkPurpose = 'delivering meat to granary';
                 this._walkTo(npc, storage.x, storage.y, this.STATE.HUNT_DELIVER_MEAT, this.STATE.DEPOSIT_RESOURCE);
             } else {
@@ -2954,6 +2988,7 @@ const NPC = {
             const nx = Math.floor(npc.x), ny = Math.floor(npc.y);
             const storage = this._findStorageFor('meat', nx, ny);
             if (storage) {
+                npc._depositBuildingId = storage.buildingId;
                 npc.walkPurpose = 'delivering meat to granary';
                 this._walkTo(npc, storage.x, storage.y, this.STATE.HUNT_DELIVER_MEAT, this.STATE.DEPOSIT_RESOURCE);
             } else {
@@ -3172,6 +3207,7 @@ const NPC = {
                             Math.floor(npc.x), Math.floor(npc.y)
                         );
                         if (stockpile) {
+                            npc._depositBuildingId = stockpile.buildingId;
                             npc.walkPurpose = 'carrying ' + npc.carrying + ' to stockpile';
                             this._walkTo(npc, stockpile.x, stockpile.y,
                                 this.STATE.WALK_TO_STOCKPILE, this.STATE.DEPOSIT_RESOURCE);
@@ -3198,16 +3234,23 @@ const NPC = {
         this._releaseAnimalReservation(npc);
         if (npc.carrying) {
             npc.walkPurpose = 'depositing ' + npc.carrying;
-            // Check if NPC is at a forward storage — deposit to building inventory
-            const atBuilding = Resources.getBuildingForTile(Math.floor(npc.x), Math.floor(npc.y));
-            if (atBuilding && BUILDINGS[atBuilding.type] && BUILDINGS[atBuilding.type].isForwardStorage) {
-                Resources.addToBuilding(atBuilding.id, npc.carrying, npc.carryAmount);
+            // Determine target building: prefer tracked ID from routing, fall back to positional check
+            let targetBuilding = null;
+            if (npc._depositBuildingId) {
+                targetBuilding = World.buildings.find(b => b.id === npc._depositBuildingId);
+            }
+            if (!targetBuilding) {
+                targetBuilding = Resources.getBuildingForTile(Math.floor(npc.x), Math.floor(npc.y));
+            }
+            if (targetBuilding && BUILDINGS[targetBuilding.type] && BUILDINGS[targetBuilding.type].isForwardStorage) {
+                Resources.addToBuilding(targetBuilding.id, npc.carrying, npc.carryAmount);
             } else {
                 Resources.add(npc.carrying, npc.carryAmount);
             }
             npc.carrying = null;
             npc.carryAmount = 0;
         }
+        npc._depositBuildingId = null;
         // Return to work (look for more resources)
         npc.walkPurpose = '';
         npc.idleReason = '';
@@ -3217,11 +3260,17 @@ const NPC = {
     _pickupResource(npc) {
         const pickupType = npc._pickupType;
         if (pickupType) {
-            // Try to pick up from the building NPC is standing at (forward storage)
-            const atBuilding = Resources.getBuildingForTile(Math.floor(npc.x), Math.floor(npc.y));
+            // Determine target building: prefer tracked ID from routing, fall back to positional check
+            let targetBuilding = null;
+            if (npc._pickupBuildingId) {
+                targetBuilding = World.buildings.find(b => b.id === npc._pickupBuildingId);
+            }
+            if (!targetBuilding) {
+                targetBuilding = Resources.getBuildingForTile(Math.floor(npc.x), Math.floor(npc.y));
+            }
             let picked = false;
-            if (atBuilding && BUILDINGS[atBuilding.type] && BUILDINGS[atBuilding.type].isForwardStorage) {
-                if (Resources.removeFromBuilding(atBuilding.id, pickupType, 1)) {
+            if (targetBuilding && BUILDINGS[targetBuilding.type] && BUILDINGS[targetBuilding.type].isForwardStorage) {
+                if (Resources.removeFromBuilding(targetBuilding.id, pickupType, 1)) {
                     picked = true;
                 }
             }
@@ -3229,6 +3278,7 @@ const NPC = {
                 Resources.remove(pickupType, 1);
                 picked = true;
             }
+            npc._pickupBuildingId = null;
             if (picked) {
                 npc.carrying = pickupType;
                 npc.carryAmount = 1;
