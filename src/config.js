@@ -247,18 +247,18 @@ const CONFIG = {
     DAYS_PER_SEASON: 5,
     SEASONS: ['spring', 'summer', 'autumn', 'winter'],
     SEASON_NAMES: { spring: 'Spring', summer: 'Summer', autumn: 'Autumn', winter: 'Winter' },
-    SEASON_ICONS: { spring: '✿', summer: '☀', autumn: '🍂', winter: '❄' },
+    SEASON_ICONS: { spring: '.,', summer: '.::', autumn: '~,', winter: '***' },
 
     // Weather definitions per season: { type, weight, duration (in hours) }
     WEATHER_TYPES: {
         clear:   { name: 'Clear',      icon: '☼' },
-        rain:    { name: 'Rain',       icon: '🌧' },
-        storm:   { name: 'Storm',      icon: '⛈' },
-        snow:    { name: 'Snow',       icon: '❆' },
-        cold:    { name: 'Cold Snap',  icon: '🥶' },
-        heat:    { name: 'Heat Wave',  icon: '🔥' },
-        dry:     { name: 'Dry Season', icon: '☁' },
-        fog:     { name: 'Fog',        icon: '🌫' }
+        rain:    { name: 'Rain',       icon: '//' },
+        storm:   { name: 'Storm',      icon: '##' },
+        snow:    { name: 'Snow',       icon: '**' },
+        cold:    { name: 'Cold Snap',  icon: '<>' },
+        heat:    { name: 'Heat Wave',  icon: '~~' },
+        dry:     { name: 'Dry Season', icon: '..' },
+        fog:     { name: 'Fog',        icon: '::' }
     },
     WEATHER_POOLS: {
         spring: [

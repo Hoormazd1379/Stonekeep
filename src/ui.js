@@ -862,6 +862,126 @@ const UI = {
         div.appendChild(taxInfo);
 
         menu.appendChild(div);
+
+        // ── Schedule Management ──
+        const schedDiv = document.createElement('div');
+        schedDiv.className = 'build-category';
+        const schedTitle = document.createElement('div');
+        schedTitle.className = 'build-category-title';
+        schedTitle.textContent = 'Schedule Management';
+        schedDiv.appendChild(schedTitle);
+
+        const ws = World.scheduleWorkStart;
+        const we = World.scheduleWorkEnd;
+        const fe = World.scheduleFreeEnd;
+        const workHours = we - ws;
+        const freeHours = fe - we;
+        const sleepHours = 24 - workHours - freeHours;
+
+        const schedInfo = document.createElement('div');
+        schedInfo.style.cssText = 'color:#aaa;font-size:10px;padding:2px 4px;';
+        schedInfo.innerHTML = `Work: <span style="color:#aaf">${ws}:00-${we}:00 (${workHours}h)</span> | Free: <span style="color:#cca">${we}:00-${fe}:00 (${freeHours}h)</span> | Sleep: <span style="color:#88a">${fe}:00-${ws}:00 (${sleepHours}h)</span>`;
+        schedDiv.appendChild(schedInfo);
+
+        // Work Start adjustment
+        const workStartRow = document.createElement('div');
+        workStartRow.style.cssText = 'display:flex;gap:4px;align-items:center;padding:2px 4px;';
+        const workStartLabel = document.createElement('span');
+        workStartLabel.style.cssText = 'color:#aaa;font-size:10px;min-width:70px;';
+        workStartLabel.textContent = 'Work Start:';
+        workStartRow.appendChild(workStartLabel);
+        const wsEarlier = document.createElement('button');
+        wsEarlier.className = 'build-btn';
+        wsEarlier.style.cssText = 'font-size:9px;padding:1px 4px;';
+        wsEarlier.textContent = '- Earlier';
+        wsEarlier.addEventListener('mousedown', () => {
+            if (World.scheduleWorkStart > 4) {
+                World.scheduleWorkStart--;
+                this.showBuildingActions(this._selectedBuilding);
+            }
+        });
+        workStartRow.appendChild(wsEarlier);
+        const wsLater = document.createElement('button');
+        wsLater.className = 'build-btn';
+        wsLater.style.cssText = 'font-size:9px;padding:1px 4px;';
+        wsLater.textContent = '+ Later';
+        wsLater.addEventListener('mousedown', () => {
+            if (World.scheduleWorkStart < World.scheduleWorkEnd - 4) {
+                World.scheduleWorkStart++;
+                this.showBuildingActions(this._selectedBuilding);
+            }
+        });
+        workStartRow.appendChild(wsLater);
+        schedDiv.appendChild(workStartRow);
+
+        // Work End adjustment
+        const workEndRow = document.createElement('div');
+        workEndRow.style.cssText = 'display:flex;gap:4px;align-items:center;padding:2px 4px;';
+        const workEndLabel = document.createElement('span');
+        workEndLabel.style.cssText = 'color:#aaa;font-size:10px;min-width:70px;';
+        workEndLabel.textContent = 'Work End:';
+        workEndRow.appendChild(workEndLabel);
+        const weEarlier = document.createElement('button');
+        weEarlier.className = 'build-btn';
+        weEarlier.style.cssText = 'font-size:9px;padding:1px 4px;';
+        weEarlier.textContent = '- Shorter';
+        weEarlier.addEventListener('mousedown', () => {
+            if (World.scheduleWorkEnd > World.scheduleWorkStart + 4) {
+                World.scheduleWorkEnd--;
+                this.showBuildingActions(this._selectedBuilding);
+            }
+        });
+        workEndRow.appendChild(weEarlier);
+        const weLater = document.createElement('button');
+        weLater.className = 'build-btn';
+        weLater.style.cssText = 'font-size:9px;padding:1px 4px;';
+        weLater.textContent = '+ Longer';
+        weLater.addEventListener('mousedown', () => {
+            if (World.scheduleWorkEnd < World.scheduleFreeEnd - 1) {
+                World.scheduleWorkEnd++;
+                this.showBuildingActions(this._selectedBuilding);
+            }
+        });
+        workEndRow.appendChild(weLater);
+        schedDiv.appendChild(workEndRow);
+
+        // Free Time End adjustment
+        const freeEndRow = document.createElement('div');
+        freeEndRow.style.cssText = 'display:flex;gap:4px;align-items:center;padding:2px 4px;';
+        const freeEndLabel = document.createElement('span');
+        freeEndLabel.style.cssText = 'color:#aaa;font-size:10px;min-width:70px;';
+        freeEndLabel.textContent = 'Bedtime:';
+        freeEndRow.appendChild(freeEndLabel);
+        const feEarlier = document.createElement('button');
+        feEarlier.className = 'build-btn';
+        feEarlier.style.cssText = 'font-size:9px;padding:1px 4px;';
+        feEarlier.textContent = '- Earlier';
+        feEarlier.addEventListener('mousedown', () => {
+            if (World.scheduleFreeEnd > World.scheduleWorkEnd + 1) {
+                World.scheduleFreeEnd--;
+                this.showBuildingActions(this._selectedBuilding);
+            }
+        });
+        freeEndRow.appendChild(feEarlier);
+        const feLater = document.createElement('button');
+        feLater.className = 'build-btn';
+        feLater.style.cssText = 'font-size:9px;padding:1px 4px;';
+        feLater.textContent = '+ Later';
+        feLater.addEventListener('mousedown', () => {
+            if (World.scheduleFreeEnd < 23) {
+                World.scheduleFreeEnd++;
+                this.showBuildingActions(this._selectedBuilding);
+            }
+        });
+        freeEndRow.appendChild(feLater);
+        schedDiv.appendChild(freeEndRow);
+
+        const schedNote = document.createElement('div');
+        schedNote.style.cssText = 'color:#666;font-size:9px;padding:2px 4px;font-style:italic;';
+        schedNote.textContent = 'Adjusts daily schedule for all villagers. Min 4h work, min 4h sleep.';
+        schedDiv.appendChild(schedNote);
+
+        menu.appendChild(schedDiv);
     },
 
     _addGranaryActions(menu) {

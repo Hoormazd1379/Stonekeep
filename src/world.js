@@ -33,6 +33,11 @@ const World = {
     selectedUnits: [],
     autoTrade: {},  // { resourceId: { min: number, max: number } }
 
+    // Schedule settings (adjustable from Keep)
+    scheduleWorkStart: 6,   // Work phase starts at this hour (default 6:00)
+    scheduleWorkEnd: 15,    // Work phase ends at this hour (default 15:00)
+    scheduleFreeEnd: 22,    // Free time ends at this hour (default 22:00)
+
     init(width, height, seed) {
         this.width = width;
         this.height = height;
@@ -49,6 +54,9 @@ const World = {
         this.rationLevel = 'Normal';
         this.selectedUnits = [];
         this.autoTrade = {};
+        this.scheduleWorkStart = CONFIG.SCHEDULE_WORK_START;
+        this.scheduleWorkEnd = CONFIG.SCHEDULE_WORK_END;
+        this.scheduleFreeEnd = CONFIG.SCHEDULE_FREE_END;
         this.generatedChunks = new Set();
 
         // Sparse tile grid — rows/tiles created on demand

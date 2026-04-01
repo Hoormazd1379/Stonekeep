@@ -283,6 +283,9 @@ const SaveLoad = {
             granaryPos: World.granaryPos ? { x: World.granaryPos.x, y: World.granaryPos.y } : null,
             stockpilePos: World.stockpilePos ? { x: World.stockpilePos.x, y: World.stockpilePos.y } : null,
             rationLevel: World.rationLevel,
+            scheduleWorkStart: World.scheduleWorkStart,
+            scheduleWorkEnd: World.scheduleWorkEnd,
+            scheduleFreeEnd: World.scheduleFreeEnd,
             selectedUnits: World.selectedUnits.slice(),
             autoTrade: JSON.parse(JSON.stringify(World.autoTrade)),
             nextBuildingId: World.nextBuildingId,
@@ -617,6 +620,9 @@ const SaveLoad = {
         World.granaryPos = w.granaryPos;
         World.stockpilePos = w.stockpilePos;
         World.rationLevel = w.rationLevel;
+        World.scheduleWorkStart = w.scheduleWorkStart !== undefined ? w.scheduleWorkStart : CONFIG.SCHEDULE_WORK_START;
+        World.scheduleWorkEnd = w.scheduleWorkEnd !== undefined ? w.scheduleWorkEnd : CONFIG.SCHEDULE_WORK_END;
+        World.scheduleFreeEnd = w.scheduleFreeEnd !== undefined ? w.scheduleFreeEnd : CONFIG.SCHEDULE_FREE_END;
         World.selectedUnits = w.selectedUnits || [];
         World.autoTrade = w.autoTrade || {};
         World.nextBuildingId = w.nextBuildingId;

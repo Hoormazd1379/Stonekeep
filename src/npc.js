@@ -382,6 +382,7 @@ const NPC = {
                         npc._diseaseStartTick = World.tick;
                         Animations.add(npc.x, npc.y, 'disease', null, { npcId: npc.id });
                         Memory.add(npc, 'got_sick', Memory.PRIORITY.DISEASE, npc.name + ' fell ill from the winter cold.', [], true);
+                        EventLog.add(npc.name + ' fell ill from the winter cold.', Math.floor(npc.x), Math.floor(npc.y), 'warning', '#cc8844', 'Sickness');
                     }
                 }
             }
@@ -494,9 +495,12 @@ const NPC = {
 
     _getSchedulePhase() {
         const h = Time.hour;
-        if (h >= CONFIG.SCHEDULE_WORK_START && h < CONFIG.SCHEDULE_WORK_END) return 'work';
-        if (h >= CONFIG.SCHEDULE_FREE_START && h < CONFIG.SCHEDULE_FREE_END) return 'free';
-        return 'sleep'; // 22:00-6:00 (wraps around midnight)
+        const workStart = World.scheduleWorkStart !== undefined ? World.scheduleWorkStart : CONFIG.SCHEDULE_WORK_START;
+        const workEnd = World.scheduleWorkEnd !== undefined ? World.scheduleWorkEnd : CONFIG.SCHEDULE_WORK_END;
+        const freeEnd = World.scheduleFreeEnd !== undefined ? World.scheduleFreeEnd : CONFIG.SCHEDULE_FREE_END;
+        if (h >= workStart && h < workEnd) return 'work';
+        if (h >= workEnd && h < freeEnd) return 'free';
+        return 'sleep';
     },
 
     // Get effective work start/end for a specific building
@@ -2789,8 +2793,8 @@ const NPC = {
             return;
         }
 
-        // Prioritize sick NPCs if closer than disease cloud
-        if (nearestSick && sickDist <= cloudDist) {
+        // Prioritize sick NPCs over disease clouds (NPCs need direct healing)
+        if (nearestSick && (sickDist <= cloudDist || !cloud)) {
             npc.walkPurpose = 'heading to sick villager';
             npc._healTargetNpc = nearestSick.id;
             this._walkTo(npc, Math.floor(nearestSick.x), Math.floor(nearestSick.y), this.STATE.DISEASE_WALK_TO_CLOUD, this.STATE.DISEASE_HEAL);
@@ -2842,7 +2846,16 @@ const NPC = {
         if (npc._healTimer >= CONFIG.DISEASE_HEAL_TICKS) {
             npc._healTimer = 0;
             Events.removeDiseaseCloud(dx, dy);
-            // Go back to idle to find next disease cloud
+            // Also cure any diseased NPCs standing on or adjacent to the cloud tile
+            for (const other of World.npcs) {
+                if (other === npc || !other.diseased || other.isBandit) continue;
+                const ox = Math.floor(other.x), oy = Math.floor(other.y);
+                if (Math.abs(ox - dx) <= 1 && Math.abs(oy - dy) <= 1) {
+                    other.diseased = false;
+                    other._diseaseRecovery = 0;
+                    other._diseaseStartTick = undefined;
+                }
+            }
             npc.state = this.STATE.IDLE;
         }
     },

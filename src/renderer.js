@@ -100,6 +100,18 @@ const Renderer = {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
+        // Pre-compute active furnace positions for winter snow melt
+        let activeFurnaces = null;
+        const isWinter = typeof Season !== 'undefined' && Season.isWinter();
+        if (isWinter) {
+            activeFurnaces = [];
+            for (const b of World.buildings) {
+                if (b.type === 'heatingFurnace' && b.active) {
+                    activeFurnaces.push({ x: b.x, y: b.y });
+                }
+            }
+        }
+
         // Render terrain tiles
         for (let y = Math.max(0, startY); y < Math.min(World.height, endY); y++) {
             for (let x = Math.max(0, startX); x < Math.min(World.width, endX); x++) {
@@ -168,6 +180,24 @@ const Renderer = {
                     }
                     ctx.fillStyle = terrain.fg;
                     ctx.fillText(ch, screenX + tw / 2, screenY + th / 2);
+                }
+
+                // Winter snow overlay — white layer on all terrain, melted near active furnaces
+                if (isWinter) {
+                    let inFurnaceRange = false;
+                    if (activeFurnaces) {
+                        const radius = CONFIG.HEATING_FURNACE_RADIUS;
+                        for (const f of activeFurnaces) {
+                            if (Math.abs(x - f.x) + Math.abs(y - f.y) <= radius) {
+                                inFurnaceRange = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!inFurnaceRange) {
+                        ctx.fillStyle = 'rgba(220, 225, 235, 0.18)';
+                        ctx.fillRect(screenX, screenY, tw + 1, th + 1);
+                    }
                 }
 
                 // Fog of war dimming: discovered but not currently visible

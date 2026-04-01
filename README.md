@@ -71,9 +71,23 @@ Build your keep, grow your population, manage complex production chains, and def
   Dawn [05:00] --> Day [07:00] --> Dusk [19:00] --> Night [21:00]
 ```
 - Full 24-hour cycle with ambient lighting shifts
-- NPCs follow phase-aware schedules
+- NPCs follow phase-aware schedules: work / free time / sleep
+- Schedule hours adjustable from the Keep for the entire population
 - Night brings increased danger and reduced visibility
 - 128 game ticks per in-game hour
+
+### +++ Seasons & Weather
+```
+  Spring [.,] --> Summer [.::] --> Autumn [~,] --> Winter [***]
+```
+- Four-season cycle, each lasting 5 in-game days
+- Per-terrain seasonal tints -- grass greens in spring, yellows in autumn, whitens in winter
+- 8 weather types: clear, rain, storm, snow, cold, heat, dry, fog with per-season weighted pools
+- Winter survival: sickness chance, speed penalties, farm shutdown, heating furnace fuel consumption
+- Snow overlay on all terrain during winter, visually melted around active heating furnaces
+- Herb gardens reduce winter sickness chance; heating furnace warmth radius protects nearby NPCs
+- Prepared meals from the cookhouse: 10 two-ingredient recipes boosting food variety
+- Season and weather displayed in the HUD ribbon
 
 ### +++ Military & Defense
 - Wall and tower construction with height-based defense bonuses
@@ -101,7 +115,8 @@ Build your keep, grow your population, manage complex production chains, and def
 ### +++ Events & Crises
 - Random event system: bandit raids, disease outbreaks, merchant caravans, wandering animals
 - Grace period protecting new settlements
-- Event log with category filtering and location tracking
+- Event log with category filtering and location tracking (including sickness entries)
+- Disease clouds spread infection; apothecary healers prioritize curing sick NPCs
 - On-screen notification system
 
 ### +++ Companion Animals
@@ -181,6 +196,7 @@ stonekeep/
     +-- military.js         Troop recruitment
     +-- events.js           Random events & disease
     +-- time.js             Day/night cycle
+    +-- season.js           Season cycle, weather & winter survival
     +-- eventLog.js         Event log UI & filtering
     +-- animations.js       Overlay visual effects
     +-- saveLoad.js         Save/load serialization

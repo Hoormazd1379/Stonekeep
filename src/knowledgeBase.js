@@ -187,7 +187,7 @@ const KnowledgeBase = {
 <tr><td>Church</td><td>500g</td><td>2 priests, radius 14, first church +1 base happiness</td></tr>
 <tr><td>Cathedral</td><td>1000g</td><td>3 priests, radius 18, first cathedral +2 base happiness</td></tr>
 <tr><td>Well</td><td>5 stone</td><td>+2 happiness, worker fights fires</td></tr>
-<tr><td>Apothecary</td><td>10 wood, 100g</td><td>Healer clears diseases. 20% resistance each (max 60%).</td></tr>
+<tr><td>Apothecary</td><td>10 wood, 100g</td><td>Healer prioritizes sick NPCs, also clears disease clouds (curing nearby NPCs). 20% resistance each (max 60%).</td></tr>
 <tr><td>Inn</td><td>20 wood, 100g</td><td>Serves ale for happiness boost.</td></tr>
 </table>
 
@@ -230,7 +230,7 @@ const KnowledgeBase = {
 <h4>Survival</h4>
 <table>
 <tr><th>Building</th><th>Size</th><th>Cost</th><th>Notes</th></tr>
-<tr><td>Heating Furnace</td><td>2×2</td><td>15 stone, 5 iron, 100g</td><td>Auto-consumes pitch in winter. Warms a 16-tile radius. Prevents winter sickness for nearby NPCs. No workers needed.</td></tr>
+<tr><td>Heating Furnace</td><td>2×2</td><td>15 stone, 5 iron, 100g</td><td>Auto-consumes pitch in winter. Warms a 16-tile radius. Prevents winter sickness for nearby NPCs. Melts snow visually in its radius when active. No workers needed.</td></tr>
 </table>`;
             }
         },
@@ -419,7 +419,7 @@ const KnowledgeBase = {
 <tr><td>Recovery</td><td>60 ticks off disease tiles</td></tr>
 <tr><td>Apothecary resistance</td><td>20% each, max 60% (3 apothecaries)</td></tr>
 </table>
-<p class="kb-tip">Tip: Apothecary healers clear disease clouds. Tamed cats also help — they heal diseased NPCs and clear clouds!</p>
+<p class="kb-tip">Tip: Apothecary healers prioritize healing sick villagers and also clear disease clouds (curing nearby NPCs in the process). Tamed cats also help — they heal diseased NPCs and clear clouds! When someone falls ill, it appears in the Event Log.</p>
 
 <h4>Event Log Panel</h4>
 <p>The <b>Event Log</b> appears on the right sidebar below the minimap, clock, and speed controls ribbon. It records major events as they happen using this format:</p>
@@ -432,8 +432,8 @@ const KnowledgeBase = {
 
 <table>
 <tr><th>Category</th><th>Color</th><th>Examples</th></tr>
-<tr><td>Danger</td><td style="color:#FF4444">#FF4444</td><td>Deaths, building destruction, bandit raids</td></tr>
-<tr><td>Warning</td><td style="color:#FF8800">#FF8800</td><td>Fires, disease outbreaks, NPC fights, desertion</td></tr>
+<tr><td>Danger</td><td style="color:#FF4444">#FF4444</td><td>Deaths, building destruction, bandit raids, NPC sickness (plague cloud/spread)</td></tr>
+<tr><td>Warning</td><td style="color:#FF8800">#FF8800</td><td>Fires, disease outbreaks, NPC fights, desertion, winter sickness</td></tr>
 <tr><td>Caution</td><td style="color:#DDDD44">#DDDD44</td><td>Theft, rivalry milestones, low-happiness departures</td></tr>
 <tr><td>Positive</td><td style="color:#44DD44">#44DD44</td><td>Arrivals, construction completed, friendships, pet taming</td></tr>
 <tr><td>Info</td><td style="color:#44DDDD">#44DDDD</td><td>Troop recruitment, worker assignment, bazaar trades</td></tr>
@@ -492,10 +492,10 @@ const KnowledgeBase = {
 <h4>Seasons</h4>
 <table>
 <tr><th>Season</th><th>Icon</th><th>Effects</th><th>Visual Tint</th></tr>
-<tr><td>Spring</td><td>🌱</td><td>Farms resume production. Chance of rain.</td><td>Lush greens on grass &amp; trees</td></tr>
-<tr><td>Summer</td><td>☀️</td><td>Full farming. Risk of heat waves (−10% speed) and dry weather. No storms.</td><td>Warm yellows on grass, hot sand tones</td></tr>
-<tr><td>Autumn</td><td>🍂</td><td>Last chance to harvest. Fog and storms possible.</td><td>Orange-brown grass, deep orange trees</td></tr>
-<tr><td>Winter</td><td>❄️</td><td>Farms and herb gardens halt entirely. Snow, cold. Sickness risk. Road decay increases.</td><td>Frost-white/blue overlay, icy trees &amp; water</td></tr>
+<tr><td>Spring</td><td>.,</td><td>Farms resume production. Chance of rain.</td><td>Lush greens on grass &amp; trees</td></tr>
+<tr><td>Summer</td><td>.::</td><td>Full farming. Risk of heat waves (−10% speed) and dry weather. No storms.</td><td>Warm yellows on grass, hot sand tones</td></tr>
+<tr><td>Autumn</td><td>~,</td><td>Last chance to harvest. Fog and storms possible.</td><td>Orange-brown grass, deep orange trees</td></tr>
+<tr><td>Winter</td><td>***</td><td>Farms and herb gardens halt entirely. Snow, cold. Sickness risk. Road decay increases.</td><td>Frost-white/blue overlay, icy trees &amp; water. Snow overlay on all terrain, melted near active heating furnaces.</td></tr>
 </table>
 <p class="kb-tip">Tip: Each terrain type (grass, trees, desert, water, stone) gets its own seasonal tint color, making seasons visually distinct!</p>
 
@@ -516,7 +516,7 @@ const KnowledgeBase = {
 <ul>
 <li><b>Farm halt:</b> All farms and herb gardens stop producing during winter. Stock up on food during spring–autumn!</li>
 <li><b>Winter sickness:</b> NPCs have a small chance to fall ill each tick during winter. This chance is reduced by staffed Herb Gardens and eliminated for NPCs near an active Heating Furnace.</li>
-<li><b>Heating Furnace:</b> Auto-consumes 1 pitch every 600 ticks during winter. Warms a 16-tile radius, preventing sickness for nearby NPCs.</li>
+<li><b>Heating Furnace:</b> Auto-consumes 1 pitch every 600 ticks during winter. Warms a 16-tile radius, preventing sickness for nearby NPCs. Visibly melts snow in its radius when active — if it runs out of pitch, snow returns.</li>
 <li><b>Jerky:</b> Smokehouse converts meat into 2 jerky — a preserved food that helps maintain food variety through winter.</li>
 <li><b>Prepared meals:</b> The Cookhouse combines 2 different raw foods into 4 prepared meals, adding variety.</li>
 </ul>
@@ -630,14 +630,15 @@ const KnowledgeBase = {
 </table>
 
 <h4>Daily Schedule</h4>
-<p>All peasants follow a daily schedule based on the in-game clock:</p>
+<p>All peasants follow a daily schedule based on the in-game clock. The schedule can be adjusted from the Keep's Schedule Management panel:</p>
 <table>
-<tr><th>Phase</th><th>Hours</th><th>Activity</th></tr>
+<tr><th>Phase</th><th>Default Hours</th><th>Activity</th></tr>
 <tr><td>Work</td><td>6:00–15:00</td><td>Workers perform their building's task cycle</td></tr>
 <tr><td>Free Time</td><td>15:00–22:00</td><td>NPCs eat, socialize, visit inn/religious sites, wander</td></tr>
 <tr><td>Sleep</td><td>22:00–6:00</td><td>NPCs go home to sleep, recovering fatigue and health</td></tr>
 </table>
-<p><b>Service workers</b> (well, religious, apothecary, inn) work during both work and free time phases (16 hours total), only sleeping at night.</p>
+<p><b>Adjustable:</b> Work start, work end, and bedtime can be adjusted from the Keep. Minimum 4 hours of work and 4 hours of sleep are enforced.</p>
+<p><b>Service workers</b> (well, religious, apothecary, inn) work during both work and free time phases, only sleeping at night.</p>
 
 <h4>Free-Time Social Behavior</h4>
 <p>During free time, civilians pick activities based on current needs and personality. Low-mood social NPCs seek conversation, pious NPCs visit religious buildings, tired NPCs may rest early, and inn visits are strongly preferred (55% chance) when ale is available or the innkeeper is already carrying ale.</p>
@@ -690,7 +691,7 @@ const KnowledgeBase = {
 <table>
 <tr><th>Role</th><th>Building</th><th>Behavior</th></tr>
 <tr><td>Firefighter</td><td>Well</td><td>Fills bucket → walks to fire → extinguishes. Immune to fire.</td></tr>
-<tr><td>Healer</td><td>Apothecary</td><td>Walks to disease clouds → removes (6 ticks/tile).</td></tr>
+<tr><td>Healer</td><td>Apothecary</td><td>Prioritizes sick NPCs over disease clouds. Walks to target → heals (6 ticks). Removing a cloud also cures nearby NPCs.</td></tr>
 <tr><td>Priest</td><td>Chapel/Church/Cathedral</td><td>Blesses nearby peasants within radius. Blessed NPCs gain a memory and mood boost; witnesses gain relationship bonus.</td></tr>
 <tr><td>Innkeeper</td><td>Inn</td><td>Fetches ale from stockpile, carries to inn, waits for customers (civilians within 3 tiles), serves ale over 20 ticks. Customer gets +3 mood and a memory.</td></tr>
 <tr><td>Hunter</td><td>Hunter's Post</td><td>Tracks → shoots → butchers (12 ticks) → delivers 5 meat.</td></tr>

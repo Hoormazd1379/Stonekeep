@@ -389,6 +389,7 @@ const Events = {
                     npc._diseaseStartTick = World.tick;
                     Animations.add(npc.x, npc.y, 'disease', null, { npcId: npc.id });
                     Memory.add(npc, 'got_sick', Memory.PRIORITY.DISEASE, npc.name + ' contracted a disease.', [], true);
+                    EventLog.add(npc.name + ' contracted a disease from a plague cloud.', Math.floor(npc.x), Math.floor(npc.y), 'danger', '#cc4444', 'Sickness');
                 }
             }
         }
@@ -407,6 +408,7 @@ const Events = {
                         other.diseased = true;
                         other._diseaseStartTick = World.tick;
                         Animations.add(other.x, other.y, 'disease', null, { npcId: other.id });
+                        EventLog.add(other.name + ' caught a disease from ' + npc.name + '.', Math.floor(other.x), Math.floor(other.y), 'danger', '#cc4444', 'Sickness');
                     }
                 }
             }
