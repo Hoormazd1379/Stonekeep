@@ -333,6 +333,14 @@ const UI = {
             }
         }
 
+        // Update season ribbon display
+        if (typeof Season !== 'undefined') {
+            document.getElementById('seasonIcon').textContent = Season.getSeasonIcon();
+            document.getElementById('seasonName').textContent = Season.getSeasonName();
+            document.getElementById('weatherIcon').textContent = Season.getWeatherIcon();
+            document.getElementById('weatherName').textContent = Season.getWeatherName();
+        }
+
         // Live-update info panel if a tile is selected
         if (this._lastInfoTileX >= 0 && this._lastInfoTileY >= 0) {
             if (World.selectedUnits.length > 1) {

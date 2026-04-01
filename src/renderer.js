@@ -65,6 +65,17 @@ const Renderer = {
             this._buildingCache[b.id] = b;
         }
 
+        // Cache seasonal terrain tint
+        this._seasonTint = null;
+        this._seasonTintColor = null;
+        if (typeof Season !== 'undefined' && World.gamePhase === 'playing') {
+            const tint = Season.getTerrainTint();
+            if (tint && tint.alpha > 0) {
+                this._seasonTint = tint;
+                this._seasonTintColor = `rgba(${tint.r}, ${tint.g}, ${tint.b}, ${tint.alpha})`;
+            }
+        }
+
         // Calculate visible tile range
         const startX = Math.floor(Camera.x / this.tileW);
         const startY = Math.floor(Camera.y / this.tileH);
@@ -91,6 +102,12 @@ const Renderer = {
                 // Background
                 ctx.fillStyle = terrain.bg;
                 ctx.fillRect(screenX, screenY, tw + 1, th + 1);
+
+                // Seasonal terrain tint overlay
+                if (this._seasonTint) {
+                    ctx.fillStyle = this._seasonTintColor;
+                    ctx.fillRect(screenX, screenY, tw + 1, th + 1);
+                }
 
                 // Draw building or terrain char
                 const bid = World.buildingMap[y] ? World.buildingMap[y][x] : undefined;
@@ -172,6 +189,9 @@ const Renderer = {
 
         // Render ambient lighting overlay (day/night cycle)
         this._renderAmbientOverlay(ctx);
+
+        // Render weather particles (rain, snow)
+        this._renderWeatherParticles(ctx);
 
         // Render drag-select box
         this._renderDragBox(ctx);
@@ -509,6 +529,34 @@ const Renderer = {
         if (ambient.alpha <= 0) return;
         ctx.fillStyle = `rgba(${ambient.r}, ${ambient.g}, ${ambient.b}, ${ambient.alpha})`;
         ctx.fillRect(0, 0, this.width, this.height);
+    },
+
+    _renderWeatherParticles(ctx) {
+        if (typeof Season === 'undefined') return;
+        const particles = Season.getParticles();
+        if (particles.length === 0) return;
+
+        for (const p of particles) {
+            const sx = p.x * this.width;
+            const sy = p.y * this.height;
+            if (sx < 0 || sx > this.width || sy < 0 || sy > this.height) continue;
+
+            if (p.type === 'snow') {
+                ctx.fillStyle = `rgba(255, 255, 255, ${0.5 + Math.random() * 0.3})`;
+                const size = 2 + Math.random() * 2;
+                ctx.beginPath();
+                ctx.arc(sx, sy, size, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                // Rain
+                ctx.strokeStyle = `rgba(150, 180, 255, ${0.3 + Math.random() * 0.3})`;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(sx, sy);
+                ctx.lineTo(sx + 1, sy + 6);
+                ctx.stroke();
+            }
+        }
     },
 
     _renderDragBox(ctx) {

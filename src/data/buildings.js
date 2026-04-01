@@ -821,6 +821,76 @@ const BUILDINGS = {
         flammable: true,
         description: 'Remote food storage. Workers haul food between here and the main Granary to keep supplies balanced.',
         walkable: false
+    },
+
+    // ── Seasonal Survival (Phase 4.2) ──
+    herbGarden: {
+        id: 'herbGarden',
+        name: 'Herb Garden',
+        category: 'food',
+        char: 'h',
+        fg: '#55AA55',
+        bg: '#0a2a0a',
+        width: 3, height: 3,
+        cost: { wood: 10, gold: 50 },
+        workers: 1,
+        produces: 'herbs',
+        produceTicks: 20,
+        produceAmount: 1,
+        requiresFertile: true,
+        flammable: true,
+        isHerbGarden: true,
+        description: 'Grows herbs on fertile land. Herbs are used in cooking and reduce winter sickness chance. Does not produce in winter.',
+        walkable: false
+    },
+    cookhouse: {
+        id: 'cookhouse',
+        name: 'Cookhouse',
+        category: 'food',
+        char: 'K',
+        fg: '#CC8844',
+        bg: '#2a1a00',
+        width: 2, height: 2,
+        cost: { wood: 15, stone: 5, gold: 75 },
+        workers: 1,
+        isCookhouse: true,
+        produceTicks: 16,
+        produceAmount: 4,
+        flammable: true,
+        description: 'Workers combine 2 different raw foods (apples, bread, cheese, meat, herbs) into 4 prepared meals. Recipe name depends on ingredients.',
+        walkable: false
+    },
+    smokehouse: {
+        id: 'smokehouse',
+        name: 'Smokehouse',
+        category: 'food',
+        char: 'k',
+        fg: '#AA7744',
+        bg: '#1a0a00',
+        width: 2, height: 2,
+        cost: { wood: 15, gold: 50 },
+        workers: 1,
+        consumes: 'meat',
+        produces: 'jerky',
+        produceTicks: 14,
+        produceAmount: 2,
+        flammable: true,
+        description: 'Cures 1 meat into 2 jerky. Jerky lasts through winter and counts as a food type for variety.',
+        walkable: false
+    },
+    heatingFurnace: {
+        id: 'heatingFurnace',
+        name: 'Heating Furnace',
+        category: 'survival',
+        char: 'H',
+        fg: '#FF8844',
+        bg: '#2a1000',
+        width: 2, height: 2,
+        cost: { stone: 15, iron: 5, gold: 100 },
+        isHeatingFurnace: true,
+        warmthRadius: CONFIG.HEATING_FURNACE_RADIUS,
+        description: 'Auto-consumes pitch during winter to warm a 16-tile radius. Melts snow, removes winter debuffs. No worker needed.',
+        walkable: false
     }
 };
 
@@ -829,14 +899,15 @@ const BUILD_CATEGORIES = [
     { id: 'castle',    name: 'Castle',    buildings: ['keep', 'granary', 'stockpile'] },
     { id: 'housing',   name: 'Housing',   buildings: ['hovel', 'cottage', 'house'] },
     { id: 'resource',  name: 'Industry',  buildings: ['woodcutter', 'quarry', 'ironMine', 'pitchRig'] },
-    { id: 'food',      name: 'Food',      buildings: ['appleOrchard', 'wheatFarm', 'windmill', 'bakery', 'dairyFarm', 'hunterPost', 'hopsFarm', 'brewery'] },
+    { id: 'food',      name: 'Food',      buildings: ['appleOrchard', 'wheatFarm', 'windmill', 'bakery', 'dairyFarm', 'hunterPost', 'hopsFarm', 'brewery', 'herbGarden', 'cookhouse', 'smokehouse'] },
     { id: 'military',  name: 'Military',  buildings: ['fletcher', 'poleturner', 'blacksmith', 'armorer', 'armory', 'barracks'] },
     { id: 'economy',   name: 'Economy',   buildings: ['bazaar'] },
     { id: 'happiness', name: 'Happiness', buildings: ['chapel', 'church', 'cathedral', 'well', 'apothecary', 'inn'] },
     { id: 'goodThings', name: 'Good Things', buildings: ['gardens', 'maypole', 'statue', 'shrine'] },
     { id: 'badThings',  name: 'Bad Things',  buildings: ['gallows', 'stocks', 'dungeon', 'gibbet'] },
     { id: 'defense',   name: 'Defense',   buildings: ['lowWall', 'highWall', 'tower', 'gatehouse', 'stairs', 'moat', 'fill', 'pitchDitch'] },
-    { id: 'frontier',  name: 'Frontier',  buildings: ['watchtower', 'guardPost', 'forwardStockpile', 'forwardGranary'] }
+    { id: 'frontier',  name: 'Frontier',  buildings: ['watchtower', 'guardPost', 'forwardStockpile', 'forwardGranary'] },
+    { id: 'survival',  name: 'Survival',  buildings: ['heatingFurnace'] }
 ];
 
 // Troop definitions

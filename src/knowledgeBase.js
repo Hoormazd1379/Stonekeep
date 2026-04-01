@@ -63,12 +63,33 @@ const KnowledgeBase = {
 <tr><td>Bread</td><td>Bakery (from flour)</td><td>Granary</td></tr>
 <tr><td>Cheese</td><td>Dairy Farm</td><td>Granary</td></tr>
 <tr><td>Meat</td><td>Hunter's Post (from animals)</td><td>Granary</td></tr>
+<tr><td>Herbs</td><td>Herb Garden</td><td>Granary</td></tr>
+<tr><td>Jerky</td><td>Smokehouse (from meat)</td><td>Granary</td></tr>
 </table>
 <p class="kb-tip">Tip: Having multiple food types gives a Food Variety happiness bonus (+1 per type above 1, max +3).</p>
+
+<h4>Prepared Meals (Cookhouse)</h4>
+<p>The Cookhouse takes 2 different raw ingredients and produces 4 prepared meals. The recipe depends on the combination:</p>
+<table>
+<tr><th>Ingredients</th><th>Meal</th></tr>
+<tr><td>Bread + Meat</td><td>Meat Pie</td></tr>
+<tr><td>Bread + Herbs</td><td>Herb Bread</td></tr>
+<tr><td>Apples + Cheese</td><td>Apple Cheese</td></tr>
+<tr><td>Cheese + Meat</td><td>Meat Stew</td></tr>
+<tr><td>Herbs + Meat</td><td>Spiced Meat</td></tr>
+<tr><td>Apples + Herbs</td><td>Herb Salad</td></tr>
+<tr><td>Apples + Bread</td><td>Fruit Pie</td></tr>
+<tr><td>Bread + Cheese</td><td>Cheese Bread</td></tr>
+<tr><td>Apples + Meat</td><td>Apple Strudel</td></tr>
+<tr><td>Cheese + Herbs</td><td>Herb Cheese</td></tr>
+</table>
+<p class="kb-tip">Tip: Prepared meals each count as a separate food type for variety bonuses!</p>
 
 <h4>Production Chains</h4>
 <p><b>Bread:</b> Wheat Farm → Windmill (wheat → flour ×2) → Bakery (flour → bread ×2)</p>
 <p><b>Ale:</b> Hops Farm → Brewery (hops → ale) → Inn (serves ale for happiness)</p>
+<p><b>Jerky:</b> Hunter's Post (meat) → Smokehouse (meat → jerky ×2)</p>
+<p><b>Prepared Meals:</b> Any 2 raw foods → Cookhouse → 4 prepared meals</p>
 <p><b>Weapons:</b> Wood/Iron → Fletcher/Poleturner/Blacksmith/Armorer → Armory → Barracks</p>
 
 <h4>Intermediate Goods</h4>
@@ -88,7 +109,7 @@ const KnowledgeBase = {
 <table>
 <tr><th>Building</th><th>Stores</th><th>Capacity</th></tr>
 <tr><td>Stockpile</td><td>Wood, Stone, Iron, Pitch, Wheat, Flour, Hops, Ale</td><td>500</td></tr>
-<tr><td>Granary</td><td>Apples, Bread, Cheese, Meat</td><td>200</td></tr>
+<tr><td>Granary</td><td>Apples, Bread, Cheese, Meat, Herbs, Jerky, Prepared Meals</td><td>200</td></tr>
 <tr><td>Armory</td><td>Bows, Spears, Swords, Armor</td><td>200</td></tr>
 </table>`;
             }
@@ -135,6 +156,9 @@ const KnowledgeBase = {
 <tr><td>Bakery</td><td>1×1</td><td>10 wood</td><td>1</td><td>Bread ×2</td><td>Flour</td></tr>
 <tr><td>Dairy Farm</td><td>4×4</td><td>5 wood</td><td>1</td><td>Cheese</td><td>Fertile land</td></tr>
 <tr><td>Hunter's Post</td><td>1×1</td><td>5 wood</td><td>1</td><td>Meat ×5</td><td>Nearby animals</td></tr>
+<tr><td>Herb Garden</td><td>3×3</td><td>10 wood, 50g</td><td>1</td><td>Herbs</td><td>Fertile land</td></tr>
+<tr><td>Cookhouse</td><td>2×2</td><td>15 wood, 5 stone, 75g</td><td>1</td><td>Meals ×4</td><td>2 different foods</td></tr>
+<tr><td>Smokehouse</td><td>2×2</td><td>15 wood, 50g</td><td>1</td><td>Jerky ×2</td><td>Meat</td></tr>
 <tr><td>Hops Farm</td><td>3×3</td><td>5 wood</td><td>1</td><td>Hops</td><td>Fertile land</td></tr>
 <tr><td>Brewery</td><td>2×2</td><td>10 wood</td><td>1</td><td>Ale</td><td>Hops</td></tr>
 </table>
@@ -201,7 +225,13 @@ const KnowledgeBase = {
 
 <h4>Fear Factor Buildings</h4>
 <p><b>Good Things</b> (Fear −1 each): Gardens (10 wood), Maypole (10 wood), Statue (10 stone), Shrine (10 stone + 100g)</p>
-<p><b>Bad Things</b> (Fear +1 each): Gallows (5 wood), Stocks (5 wood), Dungeon (10 stone), Gibbet (5 wood + 5 iron)</p>`;
+<p><b>Bad Things</b> (Fear +1 each): Gallows (5 wood), Stocks (5 wood), Dungeon (10 stone), Gibbet (5 wood + 5 iron)</p>
+
+<h4>Survival</h4>
+<table>
+<tr><th>Building</th><th>Size</th><th>Cost</th><th>Notes</th></tr>
+<tr><td>Heating Furnace</td><td>2×2</td><td>15 stone, 5 iron, 100g</td><td>Auto-consumes pitch in winter. Warms a 16-tile radius. Prevents winter sickness for nearby NPCs. No workers needed.</td></tr>
+</table>`;
             }
         },
 
@@ -449,6 +479,47 @@ const KnowledgeBase = {
 <li><b>Animal behavior</b>: Deer and camels sleep at night (barely move, harder to scare). Lions become more dangerous (extended aggro range, faster movement).</li>
 </ul>
 <p class="kb-tip">Tip: Night is dangerous — keep troops on patrol and fires lit near your settlement walls!</p>`;
+            }
+        },
+
+        seasons: {
+            title: 'Seasons & Weather',
+            content() {
+                return `
+<h3>Seasons &amp; Weather</h3>
+<p>The world cycles through four seasons: <b>Spring</b>, <b>Summer</b>, <b>Autumn</b>, and <b>Winter</b>. Each season lasts 5 days. The season and current weather are shown in the ribbon below the clock.</p>
+
+<h4>Seasons</h4>
+<table>
+<tr><th>Season</th><th>Icon</th><th>Effects</th></tr>
+<tr><td>Spring</td><td>🌱</td><td>Farms resume production. Chance of rain.</td></tr>
+<tr><td>Summer</td><td>☀️</td><td>Full farming. Risk of heat waves (−10% speed) and dry weather.</td></tr>
+<tr><td>Autumn</td><td>🍂</td><td>Last chance to harvest. Fog and storms possible.</td></tr>
+<tr><td>Winter</td><td>❄️</td><td>Farms and herb gardens halt entirely. Snow, cold. Sickness risk. Road decay increases.</td></tr>
+</table>
+
+<h4>Weather Types</h4>
+<table>
+<tr><th>Weather</th><th>Effect</th></tr>
+<tr><td>Clear</td><td>No special effects.</td></tr>
+<tr><td>Rain</td><td>Road decay ×2.</td></tr>
+<tr><td>Storm</td><td>Road decay ×2. Visual rain effect.</td></tr>
+<tr><td>Snow</td><td>Road decay ×3. Walking speed −20%. Visual snowfall.</td></tr>
+<tr><td>Cold</td><td>Walking speed −20%.</td></tr>
+<tr><td>Heat</td><td>Walking speed −10%.</td></tr>
+<tr><td>Dry</td><td>No special effects.</td></tr>
+<tr><td>Fog</td><td>Reduced visibility effect.</td></tr>
+</table>
+
+<h4>Winter Survival</h4>
+<ul>
+<li><b>Farm halt:</b> All farms and herb gardens stop producing during winter. Stock up on food during spring–autumn!</li>
+<li><b>Winter sickness:</b> NPCs have a small chance to fall ill each tick during winter. This chance is reduced by staffed Herb Gardens and eliminated for NPCs near an active Heating Furnace.</li>
+<li><b>Heating Furnace:</b> Auto-consumes 1 pitch every 600 ticks during winter. Warms a 16-tile radius, preventing sickness for nearby NPCs.</li>
+<li><b>Jerky:</b> Smokehouse converts meat into 2 jerky — a preserved food that helps maintain food variety through winter.</li>
+<li><b>Prepared meals:</b> The Cookhouse combines 2 different raw foods into 4 prepared meals, adding variety.</li>
+</ul>
+<p class="kb-tip">Tip: Build Smokehouses and Cookhouses before winter to diversify your food supply. Place Heating Furnaces near worker clusters and keep pitch stocked!</p>`;
             }
         },
 

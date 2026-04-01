@@ -368,6 +368,25 @@ const NPC = {
             }
         }
 
+        // Winter sickness: small chance each tick for NPCs to fall ill in cold weather
+        if (Season.isWinter() && World.tick % 32 === 0) {
+            const herbGardenCount = World.buildings.filter(b => b.type === 'herbGarden' && b.workers.length > 0).length;
+            const reduction = herbGardenCount * CONFIG.HERB_SICKNESS_REDUCTION;
+            const chance = CONFIG.WINTER_SICKNESS_CHANCE * Math.max(0, 1 - reduction);
+            if (chance > 0) {
+                for (const npc of World.npcs) {
+                    if (npc.isBandit || npc.diseased) continue;
+                    if (Season.isInFurnaceRange(Math.floor(npc.x), Math.floor(npc.y))) continue;
+                    if (Math.random() < chance) {
+                        npc.diseased = true;
+                        npc._diseaseStartTick = World.tick;
+                        Animations.add(npc.x, npc.y, 'disease', null, { npcId: npc.id });
+                        Memory.add(npc, 'got_sick', Memory.PRIORITY.DISEASE, npc.name + ' fell ill from the winter cold.', [], true);
+                    }
+                }
+            }
+        }
+
         // Phase 3.7: social interactions and routine sightings during free time
         this._tryStartSocialMeetings();
         this._tryStartCivilianConflicts();
@@ -2193,8 +2212,20 @@ const NPC = {
             return;
         }
 
+        // Cookhouse building: custom dual-input cycle
+        if (def.isCookhouse) {
+            this._startCookhouseCycle(npc, building, def);
+            return;
+        }
+
         // Producer building (farm, orchard, dairy): walk to building and work
         if (def.produces && !def.consumes) {
+            // Farms and herb gardens halt in winter
+            if ((def.requiresFertile || def.isHerbGarden) && !Season.isFarmingSeason()) {
+                npc.state = this.STATE.IDLE;
+                npc.idleReason = 'winter – fields frozen';
+                return;
+            }
             this._startProducerCycle(npc, building, def);
             return;
         }
@@ -2265,6 +2296,88 @@ const NPC = {
         npc._pickupType = def.consumes;
         npc._pickupBuildingId = storage.buildingId;
         npc.walkPurpose = 'fetching ' + def.consumes + ' from storage';
+        this._walkTo(npc, storage.x, storage.y, this.STATE.WALK_TO_PICKUP, this.STATE.PICKUP_RESOURCE);
+    },
+
+    // ── Cookhouse worker cycle ──
+    // Pick 2 different raw ingredients → fetch first → fetch second → cook at building → deliver meals
+    _startCookhouseCycle(npc, building, def) {
+        // If carrying meals, deliver to granary
+        if (npc.carrying && !COOKHOUSE_INPUTS.includes(npc.carrying)) {
+            const storage = this._findStorageFor(npc.carrying, Math.floor(npc.x), Math.floor(npc.y));
+            if (storage) {
+                npc._depositBuildingId = storage.buildingId;
+                npc.walkPurpose = 'delivering ' + npc.carrying + ' to granary';
+                this._walkTo(npc, storage.x, storage.y, this.STATE.DELIVER_RESOURCE, this.STATE.DEPOSIT_RESOURCE);
+            } else {
+                npc.idleReason = 'no granary available';
+                npc.state = this.STATE.IDLE;
+            }
+            return;
+        }
+
+        // If carrying second ingredient, go to cookhouse to work
+        if (npc.carrying && npc._cookhouseIngredient1) {
+            if (this._isAtBuilding(npc, building)) {
+                npc.state = this.STATE.WORKING;
+                npc.walkPurpose = 'cooking ' + npc._cookhouseIngredient1 + ' + ' + npc.carrying;
+                return;
+            }
+            npc.walkPurpose = 'carrying ingredients to ' + def.name;
+            this._walkTo(npc, building.x, building.y, this.STATE.RETURN_TO_WORK, this.STATE.WORKING, { ownBuildingId: building.id });
+            return;
+        }
+
+        // If carrying first ingredient, need to fetch second
+        if (npc.carrying && !npc._cookhouseIngredient1) {
+            npc._cookhouseIngredient1 = npc.carrying;
+            // Find a second different ingredient
+            const secondIngredient = COOKHOUSE_INPUTS.find(r => r !== npc._cookhouseIngredient1 && Resources.getTotal(r) > 0);
+            if (!secondIngredient) {
+                // Only one ingredient type available — wait
+                npc._cookhouseIngredient1 = null;
+                npc.carrying = null;
+                npc.carryAmount = 0;
+                npc.idleReason = 'need 2 different ingredients';
+                npc.state = this.STATE.IDLE;
+                return;
+            }
+            const storage2 = this._findStorageFor(secondIngredient, Math.floor(npc.x), Math.floor(npc.y));
+            if (!storage2) {
+                npc._cookhouseIngredient1 = null;
+                npc.carrying = null;
+                npc.carryAmount = 0;
+                npc.state = this.STATE.IDLE;
+                return;
+            }
+            npc._pickupType = secondIngredient;
+            npc._pickupBuildingId = storage2.buildingId;
+            npc.walkPurpose = 'fetching ' + secondIngredient + ' from storage';
+            this._walkTo(npc, storage2.x, storage2.y, this.STATE.WALK_TO_PICKUP, this.STATE.PICKUP_RESOURCE);
+            return;
+        }
+
+        // Need to pick up first ingredient: find 2 available different types
+        const available = COOKHOUSE_INPUTS.filter(r => Resources.getTotal(r) > 0);
+        if (available.length < 2) {
+            if (!this._isAtBuilding(npc, building)) {
+                npc.walkPurpose = 'walking to ' + def.name + ' (waiting for ingredients)';
+                this._walkTo(npc, building.x, building.y, this.STATE.WALK_TO_WORK, this.STATE.IDLE, { ownBuildingId: building.id });
+            } else {
+                npc.idleReason = 'need 2 different ingredients';
+            }
+            return;
+        }
+
+        // Pick first ingredient (random from available)
+        const first = available[Math.floor(Math.random() * available.length)];
+        const storage = this._findStorageFor(first, Math.floor(npc.x), Math.floor(npc.y));
+        if (!storage) return;
+
+        npc._cookhouseIngredient1 = null;
+        npc._pickupType = first;
+        npc._pickupBuildingId = storage.buildingId;
+        npc.walkPurpose = 'fetching ' + first + ' from storage';
         this._walkTo(npc, storage.x, storage.y, this.STATE.WALK_TO_PICKUP, this.STATE.PICKUP_RESOURCE);
     },
 
@@ -2755,6 +2868,9 @@ const NPC = {
         inn:         { chars: ['u', 'U', 'u'], color: '#ccaa55' },   // serving
         hunter:      { chars: ['-', '>', '-'], color: '#aa7744' },   // bow
         apothecary:  { chars: ['o', '+', 'o'], color: '#44cc88' },   // mixing
+        herbGarden:  { chars: ['J', '/', 'J'], color: '#55aa55' },   // gardening
+        cookhouse:   { chars: ['~', 'o', '~'], color: '#cc8844' },   // cooking
+        smokehouse:  { chars: ['~', '~', '~'], color: '#aa7744' },   // smoking
     },
 
     // Worker is in WORKING state at a building — handle production ticks
@@ -2854,6 +2970,39 @@ const NPC = {
             if (npc._blessTimer >= 8) {
                 npc._blessTimer = 0;
                 npc.state = this.STATE.IDLE;
+            }
+            return;
+        }
+
+        // Cookhouse: combine 2 ingredients into prepared meals
+        if (def.isCookhouse) {
+            if (!npc.carrying || !npc._cookhouseIngredient1) {
+                npc.idleReason = 'need ingredients';
+                npc._cookhouseIngredient1 = null;
+                npc.carrying = null;
+                npc.carryAmount = 0;
+                npc.state = this.STATE.IDLE;
+                return;
+            }
+            npc.walkPurpose = 'cooking ' + npc._cookhouseIngredient1 + ' + ' + npc.carrying;
+            building.production = (building.production || 0) + World.fearEfficiency * this._getFatigueEfficiency(npc);
+            if (building.production >= def.produceTicks) {
+                building.production = 0;
+                const key = [npc._cookhouseIngredient1, npc.carrying].sort().join(',');
+                const meal = COOKHOUSE_RECIPES[key] || 'meatStew';
+                npc.carrying = meal;
+                npc.carryAmount = def.produceAmount || 4;
+                npc._cookhouseIngredient1 = null;
+                Animations.add(npc.x, npc.y, 'sparkle', null, { npcId: npc.id });
+                const storage = this._findStorageFor(meal, Math.floor(npc.x), Math.floor(npc.y));
+                if (storage) {
+                    npc._depositBuildingId = storage.buildingId;
+                    npc.walkPurpose = 'delivering ' + meal + ' to granary';
+                    this._walkTo(npc, storage.x, storage.y, this.STATE.DELIVER_RESOURCE, this.STATE.DEPOSIT_RESOURCE);
+                } else {
+                    npc.idleReason = 'no storage available';
+                    npc.state = this.STATE.IDLE;
+                }
             }
             return;
         }
@@ -3453,7 +3602,8 @@ const NPC = {
         const tile = World.getTile(Math.floor(npc.x), Math.floor(npc.y));
         const roadBonus = tile ? tile.roadLevel * 0.02 : 0; // +2% speed per road level (max +30% at level 15)
         const troopBonus = (TROOPS[npc.type] && !npc.isBandit) ? CONFIG.TROOP_SPEED_BONUS : 0;
-        npc.moveProgress += CONFIG.WORKER_SPEED + roadBonus + troopBonus;
+        const seasonPenalty = Season.getSpeedModifier();
+        npc.moveProgress += Math.max(0.01, CONFIG.WORKER_SPEED + roadBonus + troopBonus - seasonPenalty);
 
         if (npc.moveProgress >= 1) {
             npc.x = target.x;

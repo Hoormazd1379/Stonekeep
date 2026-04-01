@@ -237,7 +237,75 @@ const CONFIG = {
         apothecary: 0.8,          // Light
         inn: 0.6,                 // Light
         forwardStockpile: 1.3,    // Moderate (hauling goods)
-        forwardGranary: 1.3       // Moderate (hauling food)
+        forwardGranary: 1.3,      // Moderate (hauling food)
+        herbGarden: 0.8,          // Light labor
+        cookhouse: 1.0,           // Moderate
+        smokehouse: 1.0           // Moderate
+    },
+
+    // ── Seasons & Weather ──
+    DAYS_PER_SEASON: 5,
+    SEASONS: ['spring', 'summer', 'autumn', 'winter'],
+    SEASON_NAMES: { spring: 'Spring', summer: 'Summer', autumn: 'Autumn', winter: 'Winter' },
+    SEASON_ICONS: { spring: '✿', summer: '☀', autumn: '🍂', winter: '❄' },
+
+    // Weather definitions per season: { type, weight, duration (in hours) }
+    WEATHER_TYPES: {
+        clear:   { name: 'Clear',      icon: '☼' },
+        rain:    { name: 'Rain',       icon: '🌧' },
+        storm:   { name: 'Storm',      icon: '⛈' },
+        snow:    { name: 'Snow',       icon: '❆' },
+        cold:    { name: 'Cold Snap',  icon: '🥶' },
+        heat:    { name: 'Heat Wave',  icon: '🔥' },
+        dry:     { name: 'Dry Season', icon: '☁' },
+        fog:     { name: 'Fog',        icon: '🌫' }
+    },
+    WEATHER_POOLS: {
+        spring: [
+            { type: 'clear', weight: 40 },
+            { type: 'rain',  weight: 30 },
+            { type: 'fog',   weight: 15 },
+            { type: 'storm', weight: 15 }
+        ],
+        summer: [
+            { type: 'clear', weight: 35 },
+            { type: 'heat',  weight: 30 },
+            { type: 'dry',   weight: 20 },
+            { type: 'storm', weight: 15 }
+        ],
+        autumn: [
+            { type: 'clear', weight: 30 },
+            { type: 'rain',  weight: 30 },
+            { type: 'fog',   weight: 20 },
+            { type: 'cold',  weight: 20 }
+        ],
+        winter: [
+            { type: 'clear', weight: 20 },
+            { type: 'snow',  weight: 35 },
+            { type: 'cold',  weight: 30 },
+            { type: 'storm', weight: 15 }
+        ]
+    },
+    WEATHER_MIN_DURATION_HOURS: 4,
+    WEATHER_MAX_DURATION_HOURS: 16,
+
+    // Season gameplay effects
+    WINTER_SICKNESS_CHANCE: 0.0005,     // Per NPC per tick chance of getting sick in winter
+    HERB_SICKNESS_REDUCTION: 0.25,       // Each herb garden reduces winter sickness by 25%
+    WINTER_SPEED_PENALTY: 0.15,          // 15% slower walking in winter
+    HEAT_SPEED_PENALTY: 0.10,            // 10% slower walking in heat waves
+    COLD_SPEED_PENALTY: 0.20,            // 20% slower walking in cold snaps
+    RAIN_ROAD_DECAY_MULT: 2.0,           // Road decay 2x faster in rain
+    SNOW_ROAD_DECAY_MULT: 3.0,           // Road decay 3x faster in snow
+    HEATING_FURNACE_RADIUS: 16,          // Warmth radius of heating furnace
+    HEATING_FURNACE_PITCH_INTERVAL: 600, // Ticks between pitch consumption (auto)
+
+    // Seasonal terrain color tints (RGBA overlays)
+    SEASON_TERRAIN_TINT: {
+        spring: { r: 50, g: 120, b: 50, alpha: 0.08 },
+        summer: { r: 200, g: 180, b: 50, alpha: 0.06 },
+        autumn: { r: 180, g: 100, b: 30, alpha: 0.08 },
+        winter: { r: 200, g: 220, b: 255, alpha: 0.12 }
     },
 
     // Colors

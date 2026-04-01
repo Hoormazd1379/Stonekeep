@@ -323,9 +323,35 @@
             font-size: 10px;
             color: #aaa;
         }
-        #minimapRibbon {
+        #seasonRibbon {
             position: absolute;
             top: 264px;
+            right: 6px;
+            width: 202px;
+            box-sizing: border-box;
+            background: rgba(0,0,0,0.85);
+            border: 1px solid #444;
+            border-top: none;
+            border-bottom: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 3px 6px;
+            font-family: monospace;
+            font-size: 10px;
+            color: #88CCFF;
+        }
+        #seasonRibbon .season-name {
+            font-weight: bold;
+            color: #eee;
+        }
+        #seasonRibbon .weather-name {
+            color: #aaa;
+        }
+        #minimapRibbon {
+            position: absolute;
+            top: 288px;
             right: 6px;
             width: 202px;
             box-sizing: border-box;
@@ -343,7 +369,7 @@
         }
         #eventLogPanel {
             position: absolute;
-            top: 290px;
+            top: 314px;
             right: 6px;
             width: 202px;
             bottom: 164px;
@@ -644,6 +670,12 @@
             <span class="clock-day" id="clockDay">Day 1</span>
             <span class="clock-schedule" id="clockSchedule" style="font-size:9px;color:#888;margin-left:4px"></span>
         </div>
+        <div id="seasonRibbon">
+            <span id="seasonIcon">✿</span>
+            <span class="season-name" id="seasonName">Spring</span>
+            <span id="weatherIcon">☼</span>
+            <span class="weather-name" id="weatherName">Clear</span>
+        </div>
         <div id="minimapRibbon">
             <div id="speedControls">
                 <button data-speed="0">||</button>
@@ -725,6 +757,7 @@
     <script src="src/military.js"></script>
     <script src="src/events.js"></script>
     <script src="src/time.js"></script>
+    <script src="src/season.js"></script>
     <script src="src/eventLog.js"></script>
     <script src="src/animations.js"></script>
     <script src="src/saveLoad.js"></script>

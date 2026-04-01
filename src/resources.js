@@ -85,19 +85,19 @@ const Resources = {
 
     // Get total food count (across all storages)
     getTotalFood() {
-        return this.getTotal('apples') +
-               this.getTotal('bread') +
-               this.getTotal('cheese') +
-               this.getTotal('meat');
+        let total = 0;
+        for (const r of STORAGE_TYPES.granary) {
+            total += this.getTotal(r);
+        }
+        return total;
     },
 
     // Get food variety count (how many types of food are available across all storages)
     getFoodVariety() {
         let count = 0;
-        if (this.getTotal('apples') > 0) count++;
-        if (this.getTotal('bread') > 0) count++;
-        if (this.getTotal('cheese') > 0) count++;
-        if (this.getTotal('meat') > 0) count++;
+        for (const r of STORAGE_TYPES.granary) {
+            if (this.getTotal(r) > 0) count++;
+        }
         return count;
     },
 

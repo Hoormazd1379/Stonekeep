@@ -217,6 +217,7 @@ const SaveLoad = {
             world: this._serializeWorld(),
             game: this._serializeGame(),
             time: this._serializeTime(),
+            season: this._serializeSeason(),
             camera: this._serializeCamera(),
             fire: this._serializeFire(),
             events: this._serializeEvents(),
@@ -390,7 +391,9 @@ const SaveLoad = {
             _pickupType: n._pickupType || null,
             _eatingAtBuildingId: n._eatingAtBuildingId || null,
             _depositBuildingId: n._depositBuildingId || null,
-            _pickupBuildingId: n._pickupBuildingId || null
+            _pickupBuildingId: n._pickupBuildingId || null,
+            // Cookhouse
+            _cookhouseIngredient1: n._cookhouseIngredient1 || null
         };
 
         // Troop-specific
@@ -430,6 +433,10 @@ const SaveLoad = {
             day: Time.day,
             _tickAccum: Time._tickAccum
         };
+    },
+
+    _serializeSeason() {
+        return Season.serialize();
     },
 
     _serializeCamera() {
@@ -557,6 +564,7 @@ const SaveLoad = {
         // Restore systems
         this._deserializeGame(data.game);
         this._deserializeTime(data.time);
+        if (data.season) this._deserializeSeason(data.season);
         this._deserializeCamera(data.camera);
         this._deserializeFire(data.fire);
         this._deserializeEvents(data.events);
@@ -745,7 +753,9 @@ const SaveLoad = {
             _pickupType: n._pickupType || null,
             _eatingAtBuildingId: n._eatingAtBuildingId || null,
             _depositBuildingId: n._depositBuildingId || null,
-            _pickupBuildingId: n._pickupBuildingId || null
+            _pickupBuildingId: n._pickupBuildingId || null,
+            // Cookhouse
+            _cookhouseIngredient1: n._cookhouseIngredient1 || null
         };
 
         // Troop-specific
@@ -783,6 +793,10 @@ const SaveLoad = {
         Time.day = t.day;
         Time._tickAccum = t._tickAccum;
         Time._updatePhase();
+    },
+
+    _deserializeSeason(s) {
+        Season.deserialize(s);
     },
 
     _deserializeCamera(c) {

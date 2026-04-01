@@ -29,6 +29,9 @@ const Game = {
         // Initialize time system
         Time.init();
 
+        // Initialize season system
+        Season.init();
+
         // Initialize popularity/tax system
         Popularity.init();
 
@@ -97,6 +100,7 @@ const Game = {
         Fire.update();
         Events.update();
         Time.update();
+        Season.update();
         Animations.update();
         SaveLoad.update();
 
@@ -111,10 +115,14 @@ const Game = {
         // Building auto-fire — buildings with autoFire shoot enemies (Phase 4.1)
         this._updateBuildingAutoFire();
 
+        // Heating furnace auto-consume pitch in winter
+        this._updateHeatingFurnaces();
+
         // Food consumption is now handled per-NPC via hunger system (Phase 3.3)
 
-        // Road decay (every 1200 ticks, reduce road levels by 1)
-        if (World.tick % 1200 === 0) {
+        // Road decay — interval modified by weather
+        const roadDecayInterval = Math.floor(1200 / Season.getRoadDecayMultiplier());
+        if (World.tick % roadDecayInterval === 0) {
             this._decayRoads();
         }
     },
@@ -396,6 +404,36 @@ const Game = {
         spears: { baseBuy: 25, baseSell: 12 },
         swords: { baseBuy: 40, baseSell: 20 },
         armor: { baseBuy: 45, baseSell: 22 }
+    },
+
+    _updateHeatingFurnaces() {
+        if (!Season.isWinter()) return;
+        if (World.tick % CONFIG.HEATING_FURNACE_PITCH_INTERVAL !== 0) return;
+
+        for (const b of World.buildings) {
+            if (b.type !== 'heatingFurnace') continue;
+            // Try to consume 1 pitch from main stockpile first, then forward stockpiles
+            if (Resources.get('pitch') > 0) {
+                Resources.remove('pitch', 1);
+                b.active = true;
+            } else {
+                // Try forward stockpiles
+                let found = false;
+                for (const fb of World.buildings) {
+                    if (!fb.active || fb.type !== 'forwardStockpile') continue;
+                    if (fb.storage && fb.storage.pitch > 0) {
+                        fb.storage.pitch--;
+                        found = true;
+                        break;
+                    }
+                }
+                b.active = found;
+                if (!found) {
+                    // No pitch available — furnace goes inactive
+                    Events.notify('Heating Furnace ran out of pitch!', '#FF8800');
+                }
+            }
+        }
     },
 
     _processAutoTrade() {
