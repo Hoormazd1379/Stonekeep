@@ -487,28 +487,29 @@ const KnowledgeBase = {
             content() {
                 return `
 <h3>Seasons &amp; Weather</h3>
-<p>The world cycles through four seasons: <b>Spring</b>, <b>Summer</b>, <b>Autumn</b>, and <b>Winter</b>. Each season lasts 5 days. The season and current weather are shown in the ribbon below the clock.</p>
+<p>The world cycles through four seasons: <b>Spring</b>, <b>Summer</b>, <b>Autumn</b>, and <b>Winter</b>. Each season lasts 5 days. The season and current weather are shown in the ribbon below the clock. You can choose the starting season in the New Game menu (defaults to Spring).</p>
 
 <h4>Seasons</h4>
 <table>
-<tr><th>Season</th><th>Icon</th><th>Effects</th></tr>
-<tr><td>Spring</td><td>🌱</td><td>Farms resume production. Chance of rain.</td></tr>
-<tr><td>Summer</td><td>☀️</td><td>Full farming. Risk of heat waves (−10% speed) and dry weather.</td></tr>
-<tr><td>Autumn</td><td>🍂</td><td>Last chance to harvest. Fog and storms possible.</td></tr>
-<tr><td>Winter</td><td>❄️</td><td>Farms and herb gardens halt entirely. Snow, cold. Sickness risk. Road decay increases.</td></tr>
+<tr><th>Season</th><th>Icon</th><th>Effects</th><th>Visual Tint</th></tr>
+<tr><td>Spring</td><td>🌱</td><td>Farms resume production. Chance of rain.</td><td>Lush greens on grass &amp; trees</td></tr>
+<tr><td>Summer</td><td>☀️</td><td>Full farming. Risk of heat waves (−10% speed) and dry weather. No storms.</td><td>Warm yellows on grass, hot sand tones</td></tr>
+<tr><td>Autumn</td><td>🍂</td><td>Last chance to harvest. Fog and storms possible.</td><td>Orange-brown grass, deep orange trees</td></tr>
+<tr><td>Winter</td><td>❄️</td><td>Farms and herb gardens halt entirely. Snow, cold. Sickness risk. Road decay increases.</td><td>Frost-white/blue overlay, icy trees &amp; water</td></tr>
 </table>
+<p class="kb-tip">Tip: Each terrain type (grass, trees, desert, water, stone) gets its own seasonal tint color, making seasons visually distinct!</p>
 
 <h4>Weather Types</h4>
 <table>
-<tr><th>Weather</th><th>Effect</th></tr>
-<tr><td>Clear</td><td>No special effects.</td></tr>
-<tr><td>Rain</td><td>Road decay ×2.</td></tr>
-<tr><td>Storm</td><td>Road decay ×2. Visual rain effect.</td></tr>
-<tr><td>Snow</td><td>Road decay ×3. Walking speed −20%. Visual snowfall.</td></tr>
-<tr><td>Cold</td><td>Walking speed −20%.</td></tr>
-<tr><td>Heat</td><td>Walking speed −10%.</td></tr>
-<tr><td>Dry</td><td>No special effects.</td></tr>
-<tr><td>Fog</td><td>Reduced visibility effect.</td></tr>
+<tr><th>Weather</th><th>Seasons</th><th>Effect</th></tr>
+<tr><td>Clear</td><td>All</td><td>No special effects.</td></tr>
+<tr><td>Rain</td><td>Spring, Autumn</td><td>Road decay ×2.</td></tr>
+<tr><td>Storm</td><td>Spring, Autumn, Winter</td><td>Road decay ×2. Visual rain effect.</td></tr>
+<tr><td>Snow</td><td>Winter</td><td>Road decay ×3. Walking speed −20%. Visual snowfall.</td></tr>
+<tr><td>Cold</td><td>Autumn, Winter</td><td>Walking speed −20%.</td></tr>
+<tr><td>Heat</td><td>Summer</td><td>Walking speed −10%.</td></tr>
+<tr><td>Dry</td><td>Summer</td><td>No special effects.</td></tr>
+<tr><td>Fog</td><td>Spring, Autumn</td><td>Reduced visibility effect.</td></tr>
 </table>
 
 <h4>Winter Survival</h4>
@@ -594,7 +595,7 @@ const KnowledgeBase = {
 <li><b>Religion:</b> Blessed by priest = +4 (Pious NPCs get more)</li>
 <li><b>Disease/Fire:</b> Being diseased or on fire = severe penalty</li>
 <li><b>Fear/Ale:</b> Castle-level factors contribute partially</li>
-<li><b>Memories:</b> Accumulated memory weight affects mood (positive and negative)</li>
+<li><b>Memories:</b> Accumulated memory weight affects mood (positive and negative, up to −20/+10). Bad memories like deaths, fires, and combat now carry heavier penalties.</li>
 <li><b>Relationships:</b> Average relationship quality gives up to +/-5</li>
 <li><b>Social:</b> Recent pleasant chats or arguments temporarily modify mood</li>
 <li><b>Conflict &amp; Crime:</b> Fights, theft, and witnessing desertion add negative memories that can drag mood down further</li>

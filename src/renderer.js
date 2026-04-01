@@ -65,14 +65,28 @@ const Renderer = {
             this._buildingCache[b.id] = b;
         }
 
-        // Cache seasonal terrain tint
-        this._seasonTint = null;
-        this._seasonTintColor = null;
+        // Cache seasonal terrain tints (per terrain category)
+        this._seasonTintMap = null;
         if (typeof Season !== 'undefined' && World.gamePhase === 'playing') {
-            const tint = Season.getTerrainTint();
-            if (tint && tint.alpha > 0) {
-                this._seasonTint = tint;
-                this._seasonTintColor = `rgba(${tint.r}, ${tint.g}, ${tint.b}, ${tint.alpha})`;
+            const seasonTints = CONFIG.SEASON_TERRAIN_TINT[Season.current];
+            if (seasonTints) {
+                this._seasonTintMap = {};
+                const catMap = CONFIG.SEASON_TERRAIN_CATEGORY || {};
+                // Pre-compute rgba string for each terrain id
+                for (const terrainId in catMap) {
+                    const cat = catMap[terrainId];
+                    const t = seasonTints[cat] || seasonTints['default'];
+                    if (t && t.alpha > 0) {
+                        this._seasonTintMap[terrainId] = `rgba(${t.r}, ${t.g}, ${t.b}, ${t.alpha})`;
+                    }
+                }
+                // Also cache a default for unknown terrain ids
+                const def = seasonTints['default'];
+                if (def && def.alpha > 0) {
+                    this._seasonTintDefault = `rgba(${def.r}, ${def.g}, ${def.b}, ${def.alpha})`;
+                } else {
+                    this._seasonTintDefault = null;
+                }
             }
         }
 
@@ -103,10 +117,13 @@ const Renderer = {
                 ctx.fillStyle = terrain.bg;
                 ctx.fillRect(screenX, screenY, tw + 1, th + 1);
 
-                // Seasonal terrain tint overlay
-                if (this._seasonTint) {
-                    ctx.fillStyle = this._seasonTintColor;
-                    ctx.fillRect(screenX, screenY, tw + 1, th + 1);
+                // Seasonal terrain tint overlay (per terrain type)
+                if (this._seasonTintMap) {
+                    const tintColor = this._seasonTintMap[terrain.id] || this._seasonTintDefault;
+                    if (tintColor) {
+                        ctx.fillStyle = tintColor;
+                        ctx.fillRect(screenX, screenY, tw + 1, th + 1);
+                    }
                 }
 
                 // Draw building or terrain char

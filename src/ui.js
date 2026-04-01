@@ -52,12 +52,13 @@ const UI = {
             const mapSize = parseInt(document.getElementById('mapSizeSelect').value);
             const seed = Utils.hashString(seedStr);
             const fowEnabled = document.getElementById('fowToggle').value === 'on';
+            const startingSeason = document.getElementById('seasonSelect').value;
 
             document.getElementById('newGamePanel').style.display = 'none';
             document.getElementById('hud').style.display = 'block';
 
             World.fowEnabled = fowEnabled;
-            Game.startNewGame(mapSize, seed, seedStr);
+            Game.startNewGame(mapSize, seed, seedStr, startingSeason);
         });
 
         // NPC Details modal close
@@ -1470,8 +1471,9 @@ const UI = {
 
         // Mood indicator (Phase 3.4)
         if (npc.mood !== undefined) {
-            const moodInfo = Mood.getMoodInfo(npc.mood);
-            const moodPct = npc.mood / 100;
+            const safeMood = isNaN(npc.mood) ? 0 : npc.mood;
+            const moodInfo = Mood.getMoodInfo(safeMood);
+            const moodPct = safeMood / 100;
             html += `<div style="margin-bottom:4px">`;
             html += `<div style="font-size:11px;color:#aaa">Mood <span style="color:${moodInfo.color};font-size:10px">(${moodInfo.label})</span></div>`;
             html += `<div style="background:#222;height:6px;border:1px solid #444;margin:2px 0">`;
@@ -1885,7 +1887,7 @@ const UI = {
 
         mHtml += `<div style="text-align:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #333">`;
         mHtml += `<span style="font-size:18px;color:${moodInfo.color};font-weight:bold">${moodInfo.label}</span>`;
-        mHtml += `<span style="color:#888;font-size:12px;margin-left:8px">(${npc.mood}/100)</span>`;
+        mHtml += `<span style="color:#888;font-size:12px;margin-left:8px">(${isNaN(npc.mood) ? 0 : npc.mood}/100)</span>`;
         mHtml += `</div>`;
 
         mHtml += `<div style="overflow-y:auto;flex:1">`;

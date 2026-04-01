@@ -2976,6 +2976,12 @@ const NPC = {
 
         // Cookhouse: combine 2 ingredients into prepared meals
         if (def.isCookhouse) {
+            // NPC arrived with first ingredient but hasn't set _cookhouseIngredient1 yet —
+            // redirect through the cycle to pick up the second ingredient
+            if (npc.carrying && COOKHOUSE_INPUTS.includes(npc.carrying) && !npc._cookhouseIngredient1) {
+                this._startCookhouseCycle(npc, building, def);
+                return;
+            }
             if (!npc.carrying || !npc._cookhouseIngredient1) {
                 npc.idleReason = 'need ingredients';
                 npc._cookhouseIngredient1 = null;
@@ -3029,7 +3035,7 @@ const NPC = {
                         npc.carryAmount = 0;
                         building.aleServed = (building.aleServed || 0) + 1;
                         // Customer benefits: mood bonus + memory
-                        customer.mood = Math.min(CONFIG.MOOD_MAX, (customer.mood || CONFIG.MOOD_DEFAULT) + 3);
+                        customer.mood = Math.min(100, (customer.mood || 50) + 3);
                         Memory.add(customer, 'drank_ale', Memory.PRIORITY.SOCIAL, customer.name + ' enjoyed ale at the inn.', [npc.id]);
                         Animations.add(customer.x, customer.y, 'music', 8, { npcId: customer.id });
                         // Go fetch more ale

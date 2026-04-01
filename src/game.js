@@ -8,7 +8,7 @@ const Game = {
     running: false,
     seedDisplay: '',
 
-    startNewGame(mapSize, seed, seedStr) {
+    startNewGame(mapSize, seed, seedStr, startingSeason) {
         this.seedDisplay = seedStr;
 
         const worldSize = CONFIG.WORLD_SIZE;
@@ -30,7 +30,7 @@ const Game = {
         Time.init();
 
         // Initialize season system
-        Season.init();
+        Season.init(startingSeason);
 
         // Initialize popularity/tax system
         Popularity.init();

@@ -268,10 +268,9 @@ const CONFIG = {
             { type: 'storm', weight: 15 }
         ],
         summer: [
-            { type: 'clear', weight: 35 },
-            { type: 'heat',  weight: 30 },
-            { type: 'dry',   weight: 20 },
-            { type: 'storm', weight: 15 }
+            { type: 'clear', weight: 40 },
+            { type: 'heat',  weight: 35 },
+            { type: 'dry',   weight: 25 }
         ],
         autumn: [
             { type: 'clear', weight: 30 },
@@ -300,12 +299,47 @@ const CONFIG = {
     HEATING_FURNACE_RADIUS: 16,          // Warmth radius of heating furnace
     HEATING_FURNACE_PITCH_INTERVAL: 600, // Ticks between pitch consumption (auto)
 
-    // Seasonal terrain color tints (RGBA overlays)
+    // Seasonal terrain color tints — per terrain category per season (RGBA overlays)
+    SEASON_TERRAIN_CATEGORY: {
+        grass: 'grass', oasis: 'grass',
+        desert: 'desert',
+        tree: 'tree', tree_grass: 'tree', tree_oasis: 'tree', tree_desert: 'tree',
+        stone: 'stone', iron: 'stone', pitch: 'stone', cliff: 'stone', rock: 'stone',
+        water: 'water', pitch_ditch: 'water'
+    },
     SEASON_TERRAIN_TINT: {
-        spring: { r: 50, g: 120, b: 50, alpha: 0.08 },
-        summer: { r: 200, g: 180, b: 50, alpha: 0.06 },
-        autumn: { r: 180, g: 100, b: 30, alpha: 0.08 },
-        winter: { r: 200, g: 220, b: 255, alpha: 0.12 }
+        spring: {
+            grass:   { r: 50, g: 180, b: 50, alpha: 0.10 },
+            tree:    { r: 30, g: 160, b: 30, alpha: 0.12 },
+            desert:  { r: 80, g: 140, b: 40, alpha: 0.05 },
+            water:   { r: 40, g: 100, b: 80, alpha: 0.06 },
+            stone:   { r: 60, g: 80, b: 60, alpha: 0.03 },
+            default: { r: 50, g: 120, b: 50, alpha: 0.08 }
+        },
+        summer: {
+            grass:   { r: 220, g: 200, b: 50, alpha: 0.10 },
+            tree:    { r: 80, g: 160, b: 30, alpha: 0.08 },
+            desert:  { r: 250, g: 200, b: 80, alpha: 0.08 },
+            water:   { r: 50, g: 120, b: 180, alpha: 0.04 },
+            stone:   { r: 150, g: 130, b: 80, alpha: 0.03 },
+            default: { r: 200, g: 180, b: 50, alpha: 0.06 }
+        },
+        autumn: {
+            grass:   { r: 200, g: 120, b: 30, alpha: 0.12 },
+            tree:    { r: 220, g: 100, b: 20, alpha: 0.18 },
+            desert:  { r: 150, g: 100, b: 50, alpha: 0.05 },
+            water:   { r: 60, g: 80, b: 100, alpha: 0.06 },
+            stone:   { r: 120, g: 100, b: 70, alpha: 0.04 },
+            default: { r: 180, g: 100, b: 30, alpha: 0.08 }
+        },
+        winter: {
+            grass:   { r: 200, g: 220, b: 255, alpha: 0.18 },
+            tree:    { r: 180, g: 200, b: 240, alpha: 0.20 },
+            desert:  { r: 180, g: 190, b: 210, alpha: 0.08 },
+            water:   { r: 150, g: 180, b: 220, alpha: 0.10 },
+            stone:   { r: 200, g: 210, b: 230, alpha: 0.08 },
+            default: { r: 200, g: 220, b: 255, alpha: 0.12 }
+        }
     },
 
     // Colors

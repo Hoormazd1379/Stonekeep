@@ -9,8 +9,8 @@ const Season = {
     _lastDay: -1,            // Track day changes
     _particles: [],          // Weather particle effects
 
-    init() {
-        this.current = 'spring';
+    init(startingSeason) {
+        this.current = startingSeason || 'spring';
         this.weather = 'clear';
         this._weatherEndTick = 0;
         this._seasonDay = 0;
@@ -138,6 +138,13 @@ const Season = {
 
     getTerrainTint() {
         return CONFIG.SEASON_TERRAIN_TINT[this.current] || null;
+    },
+
+    getTerrainTintFor(terrainId) {
+        const seasonTints = CONFIG.SEASON_TERRAIN_TINT[this.current];
+        if (!seasonTints) return null;
+        const cat = CONFIG.SEASON_TERRAIN_CATEGORY[terrainId] || 'default';
+        return seasonTints[cat] || seasonTints['default'] || null;
     },
 
     // ── Weather particles ──

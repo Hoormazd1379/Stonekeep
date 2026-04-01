@@ -46,37 +46,37 @@ const Memory = {
         'assigned_work':    0.3,
         'ate_food':         0.2,
         'slept':            0.1,
-        'exhaustion':      -0.5,
-        'starving':        -1.0,
+        'exhaustion':      -0.7,
+        'starving':        -1.4,
         'saw_animal':       0.1,
-        'fire_broke_out':  -2.0,
-        'building_destroyed': -2.5,
-        'caught_fire':     -3.0,
-        'got_sick':        -1.5,
+        'fire_broke_out':  -2.8,
+        'building_destroyed': -3.5,
+        'caught_fire':     -4.0,
+        'got_sick':        -2.0,
         'recovered':        1.0,
-        'bandit_raid':     -2.0,
-        'combat':          -1.5,
-        'npc_died':        -3.0,
-        'npc_killed':      -0.5,  // killed an enemy — less negative
-        'fled_bandits':    -1.0,
+        'bandit_raid':     -2.8,
+        'combat':          -2.0,
+        'npc_died':        -4.0,
+        'npc_killed':      -0.7,  // killed an enemy — less negative
+        'fled_bandits':    -1.4,
         'building_completed': 1.0,
         'blessed':          0.8,
         'harvest':          0.5,
         'routine_sighting': 0.1,
         'pleasant_chat':    0.8,
         'memory_shared':    0.4,
-        'argument':        -1.5,
+        'argument':        -2.0,
         'friendship_formed': 1.5,
-        'rivalry_formed':  -1.5,
-        'npc_fight':       -1.2,
+        'rivalry_formed':  -2.0,
+        'npc_fight':       -1.6,
         'won_fight_satisfied': 0.8,
-        'won_fight_guilty': -0.5,
-        'lost_fight':      -1.4,
+        'won_fight_guilty': -0.7,
+        'lost_fight':      -1.8,
         'stole_resource':   0.4,
-        'caught_stealing': -1.3,
-        'theft_witnessed': -1.6,
-        'deserted_settlement': -1.4,
-        'saw_desertion':   -1.2,
+        'caught_stealing': -1.8,
+        'theft_witnessed': -2.2,
+        'deserted_settlement': -1.8,
+        'saw_desertion':   -1.6,
         'drank_ale':        1.0,
         'survived_raid':    0.8
     },
@@ -94,8 +94,8 @@ const Memory = {
             const handFactor = mem.isFirsthand ? 1.0 : 0.4;
             moodSum += weight * recency * handFactor;
         }
-        // Clamp and scale to a reasonable mood modifier range (-15 to +10)
-        return Utils.clamp(Math.round(moodSum), -15, 10);
+        // Clamp and scale to a reasonable mood modifier range (-20 to +10)
+        return Utils.clamp(Math.round(moodSum), -20, 10);
     },
 
     // ── Core API ──
